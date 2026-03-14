@@ -8,7 +8,7 @@ import json
 # --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="AI Travel Admin", layout="wide")
 
-# --- 2. AUTHENTICATION (Simplified for this version) ---
+# --- 2. AUTHENTICATION ---
 if "password_correct" not in st.session_state:
     st.title("🔒 Login")
     pwd = st.text_input("Password", type="password")
@@ -18,9 +18,12 @@ if "password_correct" not in st.session_state:
             st.rerun()
     st.stop()
 
-# --- 3. DATABASE SETUP (New Columns added) ---
+# --- 3. DATABASE SETUP ---
+def get_db_connection():
+    return sqlite3.connect('air_travel_v3.db')
+
 def init_db():
-    conn = sqlite3.connect('air_travel_v2.db')
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS bookings
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,66 +36,108 @@ def init_db():
 init_db()
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- 4. THE AI PDF EXTRACTOR ---
+# --- 4. PDF EXTRACTION LOGIC ---
 def extract_info_from_pdf(file):
     reader = PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
+    text = "".join([page.extract_text() for page in reader.pages])
     
-    # Prompting the AI to return JSON for easy database insertion
     prompt = f"""
-    Extract the following information from this flight ticket text and return it ONLY as a JSON object:
-    Fields: traveler, pnr, route, cost, travel_date, booking_date.
+    Extract flight info from text and return ONLY a JSON object.
+    Fields: traveler, pnr, route, cost (number), travel_date, booking_date.
     Text: {text}
     """
-    
-    chat_completion = client.chat.completions.create(
+    completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model="llama-3.3-70b-versatile",
         response_format={"type": "json_object"}
     )
-    return json.loads(chat_completion.choices[0].message.content)
+    return json.loads(completion.choices[0].message.content)
 
 # --- 5. UI LAYOUT ---
 st.title("✈️ Smart Travel Assistant")
 
-# Sidebar for PDF Upload
+# Sidebar: Upload & Manual Entry
 with st.sidebar:
     st.header("📂 Auto-Load Ticket")
-    uploaded_file = st.file_uploader("Upload Ticket PDF", type="pdf")
+    uploaded_file = st.file_uploader("Upload PDF", type="pdf")
     
     if uploaded_file:
-        with st.spinner("AI is reading the ticket..."):
-            try:
-                data = extract_info_from_pdf(uploaded_file)
-                st.write("### AI Extracted Data:")
-                st.json(data)
-                
-                if st.button("Confirm & Save to DB"):
-                    conn = sqlite3.connect('air_travel_v2.db')
-                    c = conn.cursor()
-                    c.execute("""INSERT INTO bookings (traveler, pnr, route, status, cost, travel_date, booking_date) 
-                                 VALUES (?,?,?,?,?,?,?)""",
-                              (data.get('traveler'), data.get('pnr'), data.get('route'), 
-                               'Confirmed', data.get('cost'), data.get('travel_date'), data.get('booking_date')))
-                    conn.commit()
-                    conn.close()
-                    st.success("Saved to Database!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Could not parse PDF: {e}")
+        data = extract_info_from_pdf(uploaded_file)
+        st.json(data)
+        if st.button("Confirm & Save PDF Data"):
+            conn = get_db_connection()
+            # DUPLICATE CHECK
+            existing = pd.read_sql_query(
+                "SELECT * FROM bookings WHERE pnr = ? AND traveler = ?", 
+                conn, params=(data.get('pnr'), data.get('traveler'))
+            )
+            if existing.empty:
+                conn.execute("""INSERT INTO bookings (traveler, pnr, route, status, cost, travel_date, booking_date) 
+                             VALUES (?,?,?,?,?,?,?)""",
+                          (data.get('traveler'), data.get('pnr'), data.get('route'), 
+                           'Confirmed', data.get('cost'), data.get('travel_date'), data.get('booking_date')))
+                conn.commit()
+                st.success("Saved!")
+                st.rerun()
+            else:
+                st.error("Duplicate Error: This PNR for this traveler already exists!")
+            conn.close()
 
-# MAIN AREA: Dashboard and Chat
-col_data, col_chat = st.columns([0.6, 0.4])
+# MAIN AREA
+col_left, col_right = st.columns([0.6, 0.4])
 
-with col_data:
+with col_left:
     st.subheader("📊 Database Records")
-    conn = sqlite3.connect('air_travel_v2.db')
+    conn = get_db_connection()
     df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", conn)
+    
+    if not df.empty:
+        # Displaying with a checkbox/select for deletion
+        event = st.dataframe(df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single_row")
+        
+        # DELETE LOGIC
+        if len(event.selection.rows) > 0:
+            selected_index = event.selection.rows[0]
+            row_id = df.iloc[selected_index]['id']
+            pnr_val = df.iloc[selected_index]['pnr']
+            
+            if st.button(f"🗑️ Delete PNR: {pnr_val}"):
+                conn.execute("DELETE FROM bookings WHERE id = ?", (int(row_id),))
+                conn.commit()
+                st.warning("Record Deleted.")
+                st.rerun()
+    else:
+        st.info("No records found.")
     conn.close()
-    st.dataframe(df, use_container_width=True, hide_index=True)
 
-with col_chat:
+with col_right:
     st.subheader("🤖 AI Agent")
-    # ... (Chat logic remains same as previous version)
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat history
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask me about the travel data..."):
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        # Fetch fresh data context for Agent
+        conn = get_db_connection()
+        full_data = pd.read_sql_query("SELECT * FROM bookings", conn).to_string()
+        conn.close()
+
+        with st.chat_message("assistant"):
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": f"You are a travel analyst. Current DB:\n{full_data}"},
+                    *st.session_state.messages
+                ]
+            )
+            ans = response.choices[0].message.content
+            st.markdown(ans)
+            st.session_state.messages.append({"role": "assistant", "content": ans})
