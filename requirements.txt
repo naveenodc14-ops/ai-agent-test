@@ -1,4 +1,5 @@
 streamlit
+supabase
 groq
-pandas
 pypdf
+pandas
