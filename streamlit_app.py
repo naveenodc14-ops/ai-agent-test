@@ -1,42 +1,45 @@
 import streamlit as st
 from groq import Groq
 
-# 1. Page Config
-st.set_page_config(page_title="AI Agent Link", page_icon="⚡")
-st.title("⚡ My High-Speed AI Agent")
+st.set_page_config(page_title="Oracle SQL AI", page_icon="💾")
+st.title("🤖 Oracle SQL Assistant")
 
-# 2. Secret Handling (We'll set this up on the web)
-# On your local Mac, it will look for an environment variable
-api_key = st.secrets.get("GROQ_API_KEY")
-
-if not api_key:
-    st.warning("Please add your GROQ_API_KEY to the Streamlit Secrets.")
-    st.stop()
-
+api_key = st.secrets["GROQ_API_KEY"]
 client = Groq(api_key=api_key)
 
-# 3. Chat History Setup
+# 1. THE BRAIN CONFIGURATION (System Prompt)
+# This is where we tell the AI to think like an Oracle Senior Dev
+system_instruction = """
+You are a Senior Oracle Database Developer. 
+Your goal is to help the user write optimized PL/SQL and SQL queries.
+- Use Oracle-specific syntax (e.g., SYSDATE, TO_CHAR, NVL, Oracle JOINs).
+- Format SQL code blocks clearly.
+- If the user asks for a query, explain briefly what the query does.
+- Suggest indexes or performance tips if the query looks heavy.
+"""
+
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = [{"role": "system", "content": system_instruction}]
 
-# Display history
+# Display Chat
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    if message["role"] != "system": # Hide the system prompt from the UI
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-# 4. User Input Loop
-if prompt := st.chat_input("Ask the calculator anything..."):
+# User Input
+if prompt := st.chat_input("Describe the query you need..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Groq Response
     with st.chat_message("assistant"):
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=st.session_state.messages,
+            temperature=0.2, # Lower temperature = more precise SQL
         )
-        response_text = completion.choices[0].message.content
-        st.markdown(response_text)
+        response = completion.choices[0].message.content
+        st.markdown(response)
     
-    st.session_state.messages.append({"role": "assistant", "content": response_text})
+    st.session_state.messages.append({"role": "assistant", "content": response})
