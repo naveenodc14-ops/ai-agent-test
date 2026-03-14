@@ -88,21 +88,31 @@ if check_password():
     tab1, tab2 = st.tabs(["📊 Live Dashboard", "💬 AI Travel Agent"])
 
     # TAB 1: DATA VIEW (The 'Oracle Report' style)
+    # TAB 1: DATA VIEW (The 'Oracle Report' style)
     with tab1:
         st.subheader("Recent Travel Records")
-        conn = sqlite3.connect('air_travel.db')
-        df = pd.read_sql_query("SELECT * FROM bookings ORDER BY date_added DESC", conn)
-        conn.close()
         
-        if not df.empty:
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        try:
+            conn = sqlite3.connect('air_travel.db')
+            # Check if the table has data
+            df = pd.read_sql_query("SELECT * FROM bookings ORDER BY date_added DESC", conn)
+            conn.close()
             
-            # Simple Metrics
-            col1, col2 = st.columns(2)
-            col1.metric("Total Spend", f"${df['cost'].sum():,.2f}")
-            col2.metric("Active Bookings", len(df[df['status'] == 'Confirmed']))
-        else:
-            st.info("No bookings found. Use the sidebar to add your first flight!")
+            if not df.empty:
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                
+                # Simple Metrics
+                col1, col2 = st.columns(2)
+                col1.metric("Total Spend", f"${df['cost'].sum():,.2f}")
+                col2.metric("Total Records", len(df))
+            else:
+                st.info("The database is currently empty. Add a booking in the sidebar!")
+        
+        except Exception as e:
+            # If the table doesn't exist yet or is totally empty
+            st.warning("Database initialized. Please add your first booking in the sidebar to view the dashboard.")
+            # This creates the table if it was missing
+            init_db()
 
     # TAB 2: MODERN CHAT INTERFACE
     with tab2:
