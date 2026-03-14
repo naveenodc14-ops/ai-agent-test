@@ -1,45 +1,75 @@
 import streamlit as st
+import sqlite3
+import pandas as pd
 from groq import Groq
 
-st.set_page_config(page_title="Oracle SQL AI", page_icon="💾")
-st.title("🤖 Oracle SQL Assistant")
+# --- DATABASE SETUP ---
+def init_db():
+    conn = sqlite3.connect('air_travel.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS bookings
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  traveler TEXT,
+                  pnr TEXT,
+                  route TEXT,
+                  status TEXT,
+                  cost REAL,
+                  notes TEXT)''')
+    conn.commit()
+    conn.close()
 
-api_key = st.secrets["GROQ_API_KEY"]
-client = Groq(api_key=api_key)
+init_db()
 
-# 1. THE BRAIN CONFIGURATION (System Prompt)
-# This is where we tell the AI to think like an Oracle Senior Dev
-system_instruction = """
-You are a Senior Oracle Database Developer. 
-Your goal is to help the user write optimized PL/SQL and SQL queries.
-- Use Oracle-specific syntax (e.g., SYSDATE, TO_CHAR, NVL, Oracle JOINs).
-- Format SQL code blocks clearly.
-- If the user asks for a query, explain briefly what the query does.
-- Suggest indexes or performance tips if the query looks heavy.
-"""
+# --- UI CONFIG ---
+st.set_page_config(page_title="CEO Travel Tracker", layout="wide")
+st.title("✈️ Executive Travel Agent")
 
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": system_instruction}]
+# Groq Client
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Display Chat
-for message in st.session_state.messages:
-    if message["role"] != "system": # Hide the system prompt from the UI
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# --- SIDEBAR: ADD NEW BOOKING ---
+with st.sidebar:
+    st.header("📋 New Entry")
+    with st.form("booking_form"):
+        traveler = st.selectbox("Traveler", ["CEO", "Employee A", "Employee B"])
+        pnr = st.text_input("PNR (6 chars)")
+        route = st.text_input("Route (e.g. DXB-LHR)")
+        status = st.selectbox("Status", ["Confirmed", "Rescheduled", "Cancelled", "Credit"])
+        cost = st.number_input("Cost ($)", min_value=0.0)
+        submitted = st.form_submit_button("Save to Database")
+        
+        if submitted:
+            conn = sqlite3.connect('air_travel.db')
+            c = conn.cursor()
+            c.execute("INSERT INTO bookings (traveler, pnr, route, status, cost) VALUES (?,?,?,?,?)",
+                      (traveler, pnr, route, status, cost))
+            conn.commit()
+            conn.close()
+            st.success("Saved!")
 
-# User Input
-if prompt := st.chat_input("Describe the query you need..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# --- MAIN AREA: THE DATA & THE AGENT ---
+tab1, tab2 = st.tabs(["📊 Dashboard", "🤖 Ask the Agent"])
 
-    with st.chat_message("assistant"):
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=st.session_state.messages,
-            temperature=0.2, # Lower temperature = more precise SQL
-        )
-        response = completion.choices[0].message.content
-        st.markdown(response)
+with tab1:
+    st.subheader("Current Travel Log")
+    conn = sqlite3.connect('air_travel.db')
+    df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", conn)
+    conn.close()
+    st.dataframe(df, use_container_width=True)
+
+with tab2:
+    st.subheader("Talk to your Travel Data")
+    user_query = st.text_input("e.g., 'How much has the CEO spent so far?'")
     
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    if user_query:
+        # We pass the data context to the AI
+        data_context = df.to_string()
+        
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": f"You are a travel analyst. Use this data to answer questions: {data_context}"},
+                {"role": "user", "content": user_query}
+            ]
+        )
+        st.write(response.choices[0].message.content)
