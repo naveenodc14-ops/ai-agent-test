@@ -19,7 +19,7 @@ if "password_correct" not in st.session_state:
     st.stop()
 
 # --- 3. DATABASE SETUP ---
-DB_NAME = 'air_travel_v5.db'
+DB_NAME = 'air_travel_v6.db'
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -32,12 +32,20 @@ init_db()
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- 4. PDF EXTRACTION ---
+# --- 4. IMPROVED PDF EXTRACTION (Handles Multiple Tickets) ---
 def extract_info_from_pdf(file):
     try:
         reader = PdfReader(file)
         text = "".join([page.extract_text() for page in reader.pages])
-        prompt = f"Extract flight info to JSON: traveler, pnr, route, cost (number), travel_date, booking_date. Text: {text}"
+        
+        # We explicitly ask for a LIST of objects now
+        prompt = f"""
+        Extract flight info from the text. If there are multiple tickets/PNRs, return a LIST of JSON objects.
+        Each object must have: traveler, pnr, route, cost (number), travel_date, booking_date.
+        Return format: {{"bookings": [{{...}}, {{...}}]}}
+        Text: {text}
+        """
+        
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.3-70b-versatile",
@@ -53,34 +61,40 @@ st.title("✈️ Executive Travel Admin")
 
 with st.sidebar:
     st.header("📂 Ticket Upload")
-    uploaded_file = st.file_uploader("Upload Ticket PDF", type="pdf")
+    uploaded_file = st.file_uploader("Upload Ticket PDF (Single or Multiple)", type="pdf")
     
     if uploaded_file:
-        with st.spinner("AI analyzing..."):
-            data = extract_info_from_pdf(uploaded_file)
-            if data:
-                st.json(data)
-                if st.button("Save to Database"):
-                    # Use a clean connection for the check and insert
+        with st.spinner("AI analyzing all tickets in file..."):
+            result = extract_info_from_pdf(uploaded_file)
+            if result and "bookings" in result:
+                bookings_list = result["bookings"]
+                st.write(f"### Found {len(bookings_list)} Ticket(s)")
+                st.json(bookings_list)
+                
+                if st.button("Save All to Database"):
                     with sqlite3.connect(DB_NAME) as conn:
-                        check_df = pd.read_sql_query("SELECT pnr FROM bookings WHERE pnr = ?", conn, params=(data.get('pnr'),))
-                        
-                        if check_df.empty:
-                            conn.execute("""INSERT INTO bookings (traveler, pnr, route, status, cost, travel_date, booking_date) 
-                                         VALUES (?,?,?,?,?,?,?)""",
-                                      (data.get('traveler'), data.get('pnr'), data.get('route'), 
-                                       'Confirmed', data.get('cost'), data.get('travel_date'), data.get('booking_date')))
-                            st.success("Saved!")
-                            st.rerun()
-                        else:
-                            st.error(f"Duplicate Error: PNR {data.get('pnr')} already exists!")
+                        for item in bookings_list:
+                            pnr = item.get('pnr')
+                            # Individual Duplicate Check
+                            check_df = pd.read_sql_query("SELECT pnr FROM bookings WHERE pnr = ?", conn, params=(pnr,))
+                            
+                            if check_df.empty:
+                                conn.execute("""INSERT INTO bookings (traveler, pnr, route, status, cost, travel_date, booking_date) 
+                                             VALUES (?,?,?,?,?,?,?)""",
+                                          (item.get('traveler'), pnr, item.get('route'), 
+                                           'Confirmed', item.get('cost'), item.get('travel_date'), item.get('booking_date')))
+                                st.toast(f"Saved PNR: {pnr}")
+                            else:
+                                st.warning(f"Skipped Duplicate: {pnr}")
+                        conn.commit()
+                    st.success("Processing Complete!")
+                    st.rerun()
 
 # --- 6. SPLIT VIEW ---
 col_left, col_right = st.columns([0.6, 0.4])
 
 with col_left:
     st.subheader("📊 Records")
-    # Clean connection for reading the table
     with sqlite3.connect(DB_NAME) as conn:
         df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", conn)
     
@@ -110,7 +124,6 @@ with col_right:
         st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # Clean connection for Agent context
         with sqlite3.connect(DB_NAME) as conn:
             try:
                 db_str = pd.read_sql_query("SELECT * FROM bookings", conn).to_string()
