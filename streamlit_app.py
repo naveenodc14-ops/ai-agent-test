@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 from groq import Groq
 
-# --- 1. PAGE CONFIG ---
+# --- 1. PAGE CONFIG (Wide mode is essential here) ---
 st.set_page_config(page_title="CEO Travel Tracker", page_icon="✈️", layout="wide")
 
 # --- 2. SECURITY: AUTHENTICATION ---
@@ -26,12 +26,10 @@ def check_password():
     else:
         return True
 
-# --- 3. APP LOGIC ---
+# --- 3. MAIN APP LOGIC ---
 if check_password():
-    
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-    # DATABASE INITIALIZATION (Ensures table exists)
     def init_db():
         conn = sqlite3.connect('air_travel.db')
         c = conn.cursor()
@@ -46,7 +44,7 @@ if check_password():
 
     # --- SIDEBAR ---
     with st.sidebar:
-        st.title("Controls")
+        st.title("Settings")
         if st.button("Logout"):
             st.session_state["password_correct"] = False
             st.rerun()
@@ -68,19 +66,20 @@ if check_password():
                               (traveler, pnr, route, status, cost))
                     conn.commit()
                     conn.close()
-                    st.success("Saved!")
+                    st.toast("Saved successfully!")
                     st.rerun()
 
-    # --- MAIN CONTENT ---
+    # --- MAIN CONTENT: SPLIT SCREEN ---
     st.title("✈️ Executive Travel Management")
-    tab1, tab2 = st.tabs(["📊 Live Dashboard", "💬 AI Travel Agent"])
+    
+    # Create two columns: Left for Data (60%), Right for Chat (40%)
+    col_data, col_chat = st.columns([0.6, 0.4], gap="large")
 
-    # TAB 1: DASHBOARD
-    with tab1:
-        st.subheader("Recent Travel Records")
+    # LEFT SIDE: DASHBOARD
+    with col_data:
+        st.subheader("📊 Live Travel Log")
         try:
             conn = sqlite3.connect('air_travel.db')
-            # The 'if_exists' check is handled by init_db, but we use a try block for safety
             df = pd.read_sql_query("SELECT * FROM bookings ORDER BY id DESC", conn)
             conn.close()
             
@@ -88,38 +87,46 @@ if check_password():
                 st.dataframe(df, use_container_width=True, hide_index=True)
                 st.metric("Total Spend", f"${df['cost'].sum():,.2f}")
             else:
-                st.info("Database is empty. Add data via the sidebar.")
+                st.info("No data yet. Add a booking in the sidebar!")
         except Exception as e:
-            st.error(f"Data Loading Error: {e}")
+            st.error(f"Error: {e}")
 
-    # TAB 2: CHAT AGENT
-    with tab2:
-        st.subheader("Chat with your Data")
+    # RIGHT SIDE: CHAT AGENT (Persistent Chat Box)
+    with col_chat:
+        st.subheader("🤖 AI Assistant")
+        
+        # Container for chat history to make it scrollable
+        chat_container = st.container(height=500)
+
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+        # Display history in the container
+        with chat_container:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
-        if prompt := st.chat_input("Ask about the travel logs..."):
-            st.chat_message("user").markdown(prompt)
+        # Chat Input (at the bottom of the right column)
+        if prompt := st.chat_input("Ask about costs or PNRs..."):
+            with chat_container:
+                st.chat_message("user").markdown(prompt)
             st.session_state.messages.append({"role": "user", "content": prompt})
 
-            # Pull current data for AI context
+            # Get current data for AI
             conn = sqlite3.connect('air_travel.db')
-            data_df = pd.read_sql_query("SELECT * FROM bookings", conn)
+            data_str = pd.read_sql_query("SELECT * FROM bookings", conn).to_string()
             conn.close()
-            data_context = data_df.to_string()
 
-            with st.chat_message("assistant"):
-                response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": f"You are a travel analyst. Data:\n{data_context}"},
-                        *st.session_state.messages
-                    ],
-                )
-                full_res = response.choices[0].message.content
-                st.markdown(full_res)
-                st.session_state.messages.append({"role": "assistant", "content": full_res})
+            with chat_container:
+                with st.chat_message("assistant"):
+                    response = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": f"You are a travel analyst. Use this data:\n{data_str}"},
+                            *st.session_state.messages
+                        ],
+                    )
+                    res_text = response.choices[0].message.content
+                    st.markdown(res_text)
+            st.session_state.messages.append({"role": "assistant", "content": res_text})
