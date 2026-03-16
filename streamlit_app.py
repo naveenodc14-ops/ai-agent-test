@@ -5,12 +5,12 @@ from src.styles import apply_custom_theme
 from src.ai_agent import get_ai_response
 from src.admin_panel import show_admin_panel
 
-# Init
+# 1. Initialization
 st.set_page_config(page_title="Voyage Intel", layout="wide")
 apply_custom_theme()
 db = TravelDB()
 
-# --- Auth Gate ---
+# 2. Authentication Gate
 if "user" not in st.session_state:
     st.markdown("<h1 style='text-align:center; color:#4F46E5;'>Voyage Intelligence Hub</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -21,37 +21,46 @@ if "user" not in st.session_state:
             if st.form_submit_button("Login"):
                 user_record = db.login(u, p)
                 if user_record:
-                    st.session_state.user = user_record
+                    # If DB returns a list (common in Supabase), grab the first record
+                    st.session_state.user = user_record[0] if isinstance(user_record, list) else user_record
                     st.rerun()
-                else: st.error("Invalid credentials.")
+                else: 
+                    st.error("Invalid credentials.")
     st.stop()
 
-# --- ROLE LOGIC (The critical part) ---
-user = st.session_state.user
-# Pull role and convert to lowercase for safe comparison
-role_val = str(user.get('role', 'VIEWER')).lower()
+# --- 3. DYNAMIC ROLE DETECTION (The Fix) ---
+user_data = st.session_state.user
+is_admin = False
 
-# ACCESS LIST: This captures 'SUPER_ADMIN', 'admin_boss', and your manual 'admin'
-ADMIN_ACCESS_LEVELS = ['super_admin', 'admin_boss', 'admin']
-is_admin = role_val in ADMIN_ACCESS_LEVELS
+# This loop checks EVERY column in your user record for admin keywords
+# This prevents the "wrong column" issue entirely.
+ADMIN_KEYWORDS = ['super_admin', 'admin_boss', 'admin']
 
-# Load Travel Data
-df = pd.DataFrame(db.get_bookings())
+for key, value in user_data.items():
+    val_str = str(value).lower().strip()
+    if val_str in ADMIN_KEYWORDS:
+        is_admin = True
+        break
 
-# --- Navigation ---
-st.sidebar.title("Main Menu")
-options = ["📊 Dashboard", "💬 AI Assistant"]
-
-# Only append Admin if the check passes
+# --- 4. Navigation Construction ---
+menu = ["📊 Dashboard", "💬 AI Assistant"]
 if is_admin:
-    options.append("🛡️ Admin")
-else:
-    # Optional: Visual indicator for users that they are not admins
-    st.sidebar.info(f"Signed in as {role_val}")
+    menu.append("🛡️ Admin")
 
-choice = st.sidebar.radio("Navigate", options)
+choice = st.sidebar.radio("Navigation", menu)
 
-# --- Routing ---
+# Sidebar Info
+st.sidebar.markdown("---")
+st.sidebar.write(f"Logged in as: **{user_data.get('username', 'User')}**")
+if is_admin:
+    st.sidebar.success("Mode: Administrator")
+
+# --- 5. Data & Routing ---
+try:
+    df = pd.DataFrame(db.get_bookings())
+except:
+    df = pd.DataFrame()
+
 if choice == "📊 Dashboard":
     st.markdown("<h2 class='page-header'>Executive Dashboard</h2>", unsafe_allow_html=True)
     st.dataframe(df, use_container_width=True)
@@ -61,20 +70,27 @@ elif choice == "🛡️ Admin":
 
 elif choice == "💬 AI Assistant":
     st.markdown("<h2 class='page-header'>Voyage Intelligence Hub</h2>", unsafe_allow_html=True)
-    if "messages" not in st.session_state: st.session_state.messages = []
     
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]): st.markdown(m["content"])
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    if prompt := st.chat_input("Ask about travelers..."):
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    if prompt := st.chat_input("Ask about travelers or logistics..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
+        with st.chat_message("user"):
+            st.markdown(prompt)
         
         with st.chat_message("assistant"):
-            ans = get_ai_response(prompt, df)
-            st.markdown(ans)
-            st.session_state.messages.append({"role": "assistant", "content": ans})
+            if not df.empty:
+                response = get_ai_response(prompt, df)
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+            else:
+                st.warning("No data available to analyze.")
 
-if st.sidebar.button("Logout"):
+if st.sidebar.button("Logout", use_container_width=True):
     st.session_state.clear()
     st.rerun()
