@@ -5,12 +5,12 @@ from src.styles import apply_custom_theme
 from src.ai_agent import get_ai_response
 from src.admin_panel import show_admin_panel
 
-# Init
+# 1. Initialization
 st.set_page_config(page_title="Voyage Intel", layout="wide")
 apply_custom_theme()
 db = TravelDB()
 
-# --- Auth Gate ---
+# 2. Authentication Gate
 if "user" not in st.session_state:
     st.markdown("<h1 style='text-align:center; color:#4F46E5;'>Voyage Intelligence Hub</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -21,35 +21,43 @@ if "user" not in st.session_state:
             if st.form_submit_button("Login"):
                 user_record = db.login(u, p)
                 if user_record:
-                    # Handle Supabase list or direct dict
-                    st.session_state.user = user_record[0] if isinstance(user_record, list) else user_record
+                    # DRILL DOWN: If it's a list, take the first item
+                    raw_data = user_record[0] if isinstance(user_record, list) else user_record
+                    
+                    # FORCE FLATTEN: If 'role' is a dict, extract the string
+                    if isinstance(raw_data.get('role'), dict):
+                        raw_data['role_display'] = raw_data['role'].get('role_name')
+                    else:
+                        raw_data['role_display'] = raw_data.get('role')
+                    
+                    st.session_state.user = raw_data
                     st.rerun()
-                else: st.error("Invalid credentials.")
+                else: 
+                    st.error("Invalid credentials.")
     st.stop()
 
-# --- Permissions Logic ---
+# --- 3. ROBUST PERMISSIONS ---
 user_data = st.session_state.user
 login_name = user_data.get('username', 'User')
-role_id = user_data.get('role_id')
 
-# Logic: role_id 1 is the Admin access we defined in SQL
-is_admin = str(role_id) == '1'
+# Check both 'role_id' and 'role' for the value 1 or 'admin'
+role_id = str(user_data.get('role_id', ''))
+is_admin = role_id == '1' or str(user_data.get('role_display', '')).lower() == 'admin'
 
-# --- Navigation ---
-st.sidebar.title("Main Menu")
+# --- 4. Navigation ---
 menu = ["📊 Dashboard", "💬 AI Assistant"]
 if is_admin:
     menu.append("🛡️ Admin")
 
-choice = st.sidebar.radio("Navigate", menu)
+choice = st.sidebar.radio("Navigation", menu)
 
-# Sidebar User Info
+# SIDEBAR CLEANUP
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"👤 Logged in as: **{login_name}**")
-if is_admin:
-    st.sidebar.success("Access: Administrator")
+# Show the clean role string, not the JSON
+st.sidebar.info(f"Role: {user_data.get('role_display', 'User')}")
 
-# --- Routing ---
+# --- 5. Data & Routing ---
 try:
     df = pd.DataFrame(db.get_bookings())
 except:
@@ -65,14 +73,12 @@ elif choice == "🛡️ Admin":
 elif choice == "💬 AI Assistant":
     st.markdown("<h2 class='page-header'>Voyage Intelligence Hub</h2>", unsafe_allow_html=True)
     if "messages" not in st.session_state: st.session_state.messages = []
-    
     for m in st.session_state.messages:
         with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    if prompt := st.chat_input("Ask a question about the data..."):
+    if prompt := st.chat_input("Ask a question..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
-        
         with st.chat_message("assistant"):
             if not df.empty:
                 response = get_ai_response(prompt, df)
