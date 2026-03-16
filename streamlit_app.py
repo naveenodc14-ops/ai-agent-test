@@ -8,7 +8,7 @@ from src.ai_processor import process_ticket_pdf
 st.set_page_config(page_title="Global Travel AI", page_icon="✈️", layout="wide")
 db = TravelDB()
 
-# 2. BLUE & GREEN THEME CSS
+# 2. THE BLUE & GREEN "AERO" THEME
 st.markdown("""
     <style>
     .stApp {
@@ -58,70 +58,94 @@ if "user" not in st.session_state:
                 else: st.error("Invalid Credentials")
     st.stop()
 
-# --- 4. DATA LOADING ---
+# --- 4. GLOBAL DATA PREP ---
 user = st.session_state.user
-role = user.get('roles', {}).get('role_name', 'VIEWER')
+# Robust role check
+user_roles = user.get('roles', {})
+role = user_roles.get('role_name', 'VIEWER') if isinstance(user_roles, dict) else user.get('role_name', 'VIEWER')
+
 records = db.get_bookings()
 df = pd.DataFrame(records) if records else pd.DataFrame()
 
-# Data Cleaning for AI
 if not df.empty:
     df['cost'] = pd.to_numeric(df['cost'], errors='coerce').fillna(0)
-    # Ensure date column is readable for the "Last Travel" question
-    if 'travel_date' in df.columns:
-        df['travel_date'] = pd.to_datetime(df['travel_date'], errors='coerce')
+    # Automatically identify date columns
+    for col in df.columns:
+        if 'date' in col.lower():
+            df[col] = pd.to_datetime(df[col], errors='coerce')
 
 # --- 5. NAVIGATION ---
 st.sidebar.markdown(f"<h3 style='color: #00FF88;'>Welcome, {user['username']}</h3>", unsafe_allow_html=True)
-choice = st.sidebar.radio("Navigation", ["📊 Dashboard", "💬 AI Assistant"])
+st.sidebar.write(f"Access Level: `{role}`")
+
+menu = ["📊 Dashboard", "💬 AI Assistant"]
+if role == 'SUPER_ADMIN':
+    menu.append("🛡️ User Admin")
+
+choice = st.sidebar.radio("Navigation", menu)
+
+# --- 6. PAGE ROUTING ---
 
 if choice == "📊 Dashboard":
     st.markdown("<h2 style='color: #00CFFF;'>📊 Executive Overview</h2>", unsafe_allow_html=True)
     if not df.empty:
         st.dataframe(df, use_container_width=True)
-    else: st.info("No travel logs found.")
+    else: st.info("No data found.")
+
+elif choice == "🛡️ User Admin":
+    st.markdown("<h2 style='color: #00FF88;'>🛡️ User Management</h2>", unsafe_allow_html=True)
+    show_admin_panel(db)
 
 elif choice == "💬 AI Assistant":
-    st.markdown("<h2 style='color: #00FF88;'>💬 Unrestricted AI Agent</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #00FF88;'>💬 Unrestricted AI Analyst</h2>", unsafe_allow_html=True)
     
     if df.empty:
-        st.warning("No data available for analysis.")
+        st.warning("Database is empty. Please upload data via Dashboard.")
     else:
-        if prompt := st.chat_input("Ask me anything about the travel records..."):
+        if prompt := st.chat_input("Ask any question about your records..."):
             with st.chat_message("user"): st.write(prompt)
             
             with st.chat_message("assistant"):
                 q = prompt.lower()
                 
-                # 1. TIME-BASED QUESTIONS (e.g., "When was the last travel?")
-                if any(word in q for word in ["last", "latest", "recent", "when"]):
-                    if 'travel_date' in df.columns:
-                        latest_trip = df.sort_values(by='travel_date', ascending=False).iloc[0]
-                        date_str = latest_trip['travel_date'].strftime('%Y-%m-%d')
-                        res = f"The most recent travel recorded was on **{date_str}** for **{latest_trip.get('destination', 'a destination')}** at a cost of **${latest_trip['cost']:,.2f}**."
+                # --- DYNAMIC DATA EXPLORATION ENGINE ---
+                # This doesn't wait for keywords; it scans the whole DF
+                try:
+                    # Logic 1: Time-based sorting for "When", "Last", "Recent"
+                    if any(x in q for x in ["when", "last", "latest", "recent"]):
+                        date_cols = [c for c in df.columns if 'date' in c.lower()]
+                        if date_cols:
+                            sort_col = date_cols[0]
+                            latest = df.sort_values(by=sort_col, ascending=False).iloc[0]
+                            res = " | ".join([f"**{c}**: {latest[c]}" for c in df.columns])
+                            st.write(f"The most recent record found is:\n\n{res}")
+                        else:
+                            st.write("I found the records, but no date column is available to sort by.")
+
+                    # Logic 2: Aggregation for "Cost", "Total", "Average"
+                    elif any(x in q for x in ["cost", "spend", "total", "average", "how much"]):
+                        total = df['cost'].sum()
+                        avg = df['cost'].mean()
+                        st.write(f"Total Expenditure: **${total:,.2f}** | Average Cost: **${avg:,.2f}**")
+                        st.write("Full cost breakdown is visible in your Dashboard.")
+
+                    # Logic 3: Entity Search for "Who", "Where", "Traveler", "Dest"
+                    elif any(x in q for x in ["who", "where", "destination", "person", "name"]):
+                        # Find the most frequent values in string columns
+                        text_cols = df.select_dtypes(include=['object']).columns
+                        summary = ""
+                        for tc in text_cols:
+                            top_val = df[tc].mode()[0] if not df[tc].empty else "None"
+                            summary += f"* Top **{tc}**: {top_val}\n"
+                        st.write("Based on the current records:\n" + summary)
+
+                    # Logic 4: THE "SHOW EVERYTHING" FALLBACK
                     else:
-                        res = "I can see the records, but I don't see a 'travel_date' column to verify the timing."
-
-                # 2. COST QUESTIONS
-                elif any(word in q for word in ["cost", "spend", "expensive", "total"]):
-                    total = df['cost'].sum()
-                    max_p = df['cost'].max()
-                    if "max" in q or "expensive" in q:
-                        res = f"The most expensive trip cost **${max_p:,.2f}**."
-                    else:
-                        res = f"The total spend across all {len(df)} records is **${total:,.2f}**."
-
-                # 3. DESTINATION QUESTIONS
-                elif "where" in q or "destination" in q:
-                    top_loc = df['destination'].mode()[0] if 'destination' in df.columns else "Unknown"
-                    res = f"The most frequent destination in your records is **{top_loc}**."
-
-                # 4. CATCH-ALL (Prevents the 'same answer' loop)
-                else:
-                    # Summarize the data so the user knows what the AI *can* see
-                    res = f"I've analyzed {len(df)} records. I can tell you about dates, costs, destinations, or travelers. For example, the total cost is ${df['cost'].sum():,.2f}."
-
-                st.write(res)
+                        st.write(f"I've scanned all **{len(df)}** records. Here is a high-level summary:")
+                        st.json(df.describe(include='all').iloc[0].to_dict()) # Shows counts/uniques for all columns
+                
+                except Exception as e:
+                    st.error(f"Logic Error: {e}")
 
 if st.sidebar.button("Logout"):
     del st.session_state.user
