@@ -2,13 +2,12 @@ import streamlit as st
 import pandas as pd
 from src.database import TravelDB
 from src.admin_panel import show_admin_panel
-from src.ai_processor import process_ticket_pdf
 
 # 1. Page Config
 st.set_page_config(page_title="Global Travel AI", page_icon="✈️", layout="wide")
 db = TravelDB()
 
-# 2. THE BLUE & GREEN "AERO" THEME
+# 2. THE BLUE & GREEN THEME CSS
 st.markdown("""
     <style>
     .stApp {
@@ -58,95 +57,84 @@ if "user" not in st.session_state:
                 else: st.error("Invalid Credentials")
     st.stop()
 
-# --- 4. GLOBAL DATA PREP ---
+# --- 4. DATA LOADING ---
 user = st.session_state.user
-# Robust role check
-user_roles = user.get('roles', {})
-role = user_roles.get('role_name', 'VIEWER') if isinstance(user_roles, dict) else user.get('role_name', 'VIEWER')
+role = user.get('roles', {}).get('role_name', 'VIEWER') if isinstance(user.get('roles'), dict) else user.get('role_name', 'VIEWER')
 
 records = db.get_bookings()
 df = pd.DataFrame(records) if records else pd.DataFrame()
 
 if not df.empty:
     df['cost'] = pd.to_numeric(df['cost'], errors='coerce').fillna(0)
-    # Automatically identify date columns
-    for col in df.columns:
-        if 'date' in col.lower():
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+    # Identify Date Columns Dynamically
+    date_col = next((c for c in df.columns if 'date' in c.lower()), None)
+    if date_col:
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 
 # --- 5. NAVIGATION ---
 st.sidebar.markdown(f"<h3 style='color: #00FF88;'>Welcome, {user['username']}</h3>", unsafe_allow_html=True)
-st.sidebar.write(f"Access Level: `{role}`")
-
 menu = ["📊 Dashboard", "💬 AI Assistant"]
-if role == 'SUPER_ADMIN':
-    menu.append("🛡️ User Admin")
-
+if role == 'SUPER_ADMIN': menu.append("🛡️ User Admin")
 choice = st.sidebar.radio("Navigation", menu)
 
 # --- 6. PAGE ROUTING ---
-
 if choice == "📊 Dashboard":
     st.markdown("<h2 style='color: #00CFFF;'>📊 Executive Overview</h2>", unsafe_allow_html=True)
     if not df.empty:
         st.dataframe(df, use_container_width=True)
-    else: st.info("No data found.")
+    else: st.info("No logs found.")
 
 elif choice == "🛡️ User Admin":
-    st.markdown("<h2 style='color: #00FF88;'>🛡️ User Management</h2>", unsafe_allow_html=True)
     show_admin_panel(db)
 
 elif choice == "💬 AI Assistant":
-    st.markdown("<h2 style='color: #00FF88;'>💬 Unrestricted AI Analyst</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #00FF88;'>💬 Smart Logistics Agent</h2>", unsafe_allow_html=True)
     
     if df.empty:
-        st.warning("Database is empty. Please upload data via Dashboard.")
+        st.warning("No travel data found in database.")
     else:
-        if prompt := st.chat_input("Ask any question about your records..."):
+        if prompt := st.chat_input("Ask me anything about travel..."):
             with st.chat_message("user"): st.write(prompt)
             
             with st.chat_message("assistant"):
                 q = prompt.lower()
                 
-                # --- DYNAMIC DATA EXPLORATION ENGINE ---
-                # This doesn't wait for keywords; it scans the whole DF
-                try:
-                    # Logic 1: Time-based sorting for "When", "Last", "Recent"
-                    if any(x in q for x in ["when", "last", "latest", "recent"]):
-                        date_cols = [c for c in df.columns if 'date' in c.lower()]
-                        if date_cols:
-                            sort_col = date_cols[0]
-                            latest = df.sort_values(by=sort_col, ascending=False).iloc[0]
-                            res = " | ".join([f"**{c}**: {latest[c]}" for c in df.columns])
-                            st.write(f"The most recent record found is:\n\n{res}")
-                        else:
-                            st.write("I found the records, but no date column is available to sort by.")
+                # --- AGENT LOGIC: DYNAMIC COLUMN MAPPING ---
+                # This finds "Who", "Where", "When" without hardcoding
+                traveler_col = next((c for c in df.columns if 'name' in c.lower() or 'traveler' in c.lower()), 'traveler_name')
+                dest_col = next((c for c in df.columns if 'dest' in c.lower()), 'destination')
+                date_col = next((c for c in df.columns if 'date' in c.lower()), None)
 
-                    # Logic 2: Aggregation for "Cost", "Total", "Average"
-                    elif any(x in q for x in ["cost", "spend", "total", "average", "how much"]):
-                        total = df['cost'].sum()
-                        avg = df['cost'].mean()
-                        st.write(f"Total Expenditure: **${total:,.2f}** | Average Cost: **${avg:,.2f}**")
-                        st.write("Full cost breakdown is visible in your Dashboard.")
-
-                    # Logic 3: Entity Search for "Who", "Where", "Traveler", "Dest"
-                    elif any(x in q for x in ["who", "where", "destination", "person", "name"]):
-                        # Find the most frequent values in string columns
-                        text_cols = df.select_dtypes(include=['object']).columns
-                        summary = ""
-                        for tc in text_cols:
-                            top_val = df[tc].mode()[0] if not df[tc].empty else "None"
-                            summary += f"* Top **{tc}**: {top_val}\n"
-                        st.write("Based on the current records:\n" + summary)
-
-                    # Logic 4: THE "SHOW EVERYTHING" FALLBACK
+                # Question: "When was the last travel and by whom?"
+                if "last" in q or "latest" in q or "recent" in q:
+                    if date_col:
+                        latest_row = df.sort_values(by=date_col, ascending=False).iloc[0]
+                        date_val = latest_row[date_col].strftime('%Y-%m-%d')
+                        person = latest_row.get(traveler_col, "an unknown traveler")
+                        place = latest_row.get(dest_col, "a destination")
+                        
+                        st.write(f"The last travel was on **{date_val}** by **{person}** to **{place}**.")
                     else:
-                        st.write(f"I've scanned all **{len(df)}** records. Here is a high-level summary:")
-                        st.json(df.describe(include='all').iloc[0].to_dict()) # Shows counts/uniques for all columns
-                
-                except Exception as e:
-                    st.error(f"Logic Error: {e}")
+                        st.write("I can see the trips, but there is no date column to determine which was 'last'.")
 
-if st.sidebar.button("Logout"):
+                # Question: "How much did [Name] spend?" or "Total cost?"
+                elif "cost" in q or "spend" in q or "price" in q:
+                    # Check if user asked about a specific person in the data
+                    found_person = False
+                    for name in df[traveler_col].unique():
+                        if str(name).lower() in q:
+                            person_spend = df[df[traveler_col] == name]['cost'].sum()
+                            st.write(f"**{name}** has spent a total of **${person_spend:,.2f}**.")
+                            found_person = True
+                            break
+                    
+                    if not found_person:
+                        st.write(f"The total expenditure recorded in the system is **${df['cost'].sum():,.2f}**.")
+
+                # Fallback: General Data Intelligence
+                else:
+                    st.write("I'm ready. Ask me about a specific traveler, a total cost, or the latest trip details.")
+
+if st.sidebar.button("Logout", use_container_width=True):
     del st.session_state.user
     st.rerun()
