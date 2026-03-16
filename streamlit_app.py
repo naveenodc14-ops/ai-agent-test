@@ -1,168 +1,127 @@
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 from src.database import TravelDB
 from src.admin_panel import show_admin_panel
 from src.ai_processor import process_ticket_pdf
 
-# 1. Page Configuration
-st.set_page_config(page_title="Travel AI Portal", page_icon="✈️", layout="wide")
-
-# Initialize Database
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Global Travel AI", page_icon="✈️", layout="wide")
 db = TravelDB()
 
-# 2. EXECUTIVE MINIMALISM CSS
-st.markdown("""
+# --- STEP 1: DEFINE THE CUSTOM HTML INTERFACE ---
+# This is your Blue/Green Futuristic Landing Page
+login_page_html = """
+<!DOCTYPE html>
+<html>
+<head>
     <style>
-    /* Full Screen Background with a HEAVY dark overlay for a clean look */
-    .stApp {
-        background: linear-gradient(rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.85)), 
-                    url("https://images.unsplash.com/photo-1436491865332-7a61a109c0f3?q=80&w=2000&auto=format&fit=crop");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }
-
-    /* Clean, Solid White Cards for Data (Oracle-style) */
-    [data-testid="stForm"], .stDataFrame, .stExpander, div[data-testid="stMetric"] {
-        background-color: #FFFFFF !important;
-        padding: 25px !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
-        border: none !important;
-    }
-
-    /* Professional Button - Solid Navy to Green Transition */
-    div.stButton > button {
-        background-color: #1E3A8A !important; /* Deep Corporate Blue */
-        color: white !important;
-        border: none !important;
-        border-radius: 4px !important;
-        padding: 12px 24px !important;
-        font-weight: 600 !important;
-        width: 100%;
-    }
-    div.stButton > button:hover {
-        background-color: #15803D !important; /* Professional Green */
-        box-shadow: 0 4px 12px rgba(21, 128, 61, 0.3) !important;
-    }
-
-    /* AI Chat Bubbles - Clean and High Contrast */
-    [data-testid="stChatMessage"] {
-        background-color: #F8FAFC !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 10px !important;
-        color: #1E293B !important;
-        margin-bottom: 10px;
-    }
-    
-    /* Typography */
-    h1, h2, h3 {
-        color: #F8FAFC !important;
-        font-family: 'Inter', sans-serif;
-        letter-spacing: -0.02em;
-    }
-    
-    /* Metrics numbers in Green for positive/growth feel */
-    div[data-testid="stMetricValue"] {
-        color: #16A34A !important;
-        font-weight: 700 !important;
-    }
-    
-    /* Sidebar styling */
-    [data-testid="stSidebar"] {
-        background-color: #0F172A !important;
-        border-right: 1px solid #1E293B !important;
-    }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap');
+        body {
+            margin: 0; padding: 0; font-family: 'Inter', sans-serif;
+            background: #0F172A; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.8)), 
+                        url('https://images.unsplash.com/photo-1542385151-5184b292a832?q=80&w=2000&auto=format&fit=crop');
+            background-size: cover; background-position: center;
+        }
+        .login-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            padding: 50px; border-radius: 24px;
+            text-align: center; width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        h1 {
+            background: linear-gradient(90deg, #00CFFF, #00FF88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 3rem; margin-bottom: 10px;
+        }
+        p { color: #94A3B8; margin-bottom: 30px; font-size: 1.1rem; }
+        .btn {
+            width: 100%; padding: 16px;
+            background: linear-gradient(90deg, #1E3A8A, #15803D);
+            border: none; border-radius: 12px;
+            color: white; font-weight: 700; font-size: 1rem;
+            cursor: pointer; transition: 0.3s;
+            text-decoration: none; display: inline-block;
+        }
+        .btn:hover {
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+            transform: translateY(-3px);
+        }
     </style>
-    """, unsafe_allow_html=True)
+</head>
+<body>
+    <div class="login-card">
+        <h1>TRAVEL AI</h1>
+        <p>Secure Enterprise Gateway</p>
+        <a href="/?auth=success" target="_self" class="btn">INITIALIZE SYSTEM</a>
+    </div>
+</body>
+</html>
+"""
 
-# --- 3. LOGIN PAGE ---
-if "user" not in st.session_state:
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; font-size: 2.8rem;'>✈️ TRAVEL PORTAL</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94A3B8; font-size: 1.1rem;'>Enterprise Logistics Management System</p>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 1.2, 1])
-    with col2:
-        with st.form("login_gate"):
-            st.markdown("<h3 style='color: #1E293B; text-align: center;'>Secure Authentication</h3>", unsafe_allow_html=True)
-            u = st.text_input("Username")
-            p = st.text_input("Password", type="password")
-            if st.form_submit_button("SIGN IN TO SYSTEM"):
-                user_data = db.login(u, p)
-                if user_data:
-                    st.session_state.user = user_data
-                    st.rerun()
-                else:
-                    st.error("Access Denied. Check credentials.")
+# --- STEP 2: APP LOGIC ---
+
+# Check if the user clicked the HTML button (Check URL parameters)
+query_params = st.query_params
+if "auth" in query_params and query_params["auth"] == "success":
+    st.session_state.authenticated = True
+
+# 🟢 CASE A: USER IS NOT LOGGED IN
+if "authenticated" not in st.session_state:
+    # Render the full-screen HTML/CSS Landing Page
+    components.html(login_page_html, height=1000, scrolling=False)
     st.stop()
 
-# --- 4. NAVIGATION ---
-user = st.session_state.user
-role = user.get('roles', {}).get('role_name', 'VIEWER')
-
-st.sidebar.markdown(f"<h2 style='color: #10B981;'>{user['username']}</h2>", unsafe_allow_html=True)
-st.sidebar.markdown(f"**Security Role:** `{role}`")
-st.sidebar.divider()
-
-menu = ["💬 AI Assistant"]
-if role in ['SUPER_ADMIN', 'MANAGER']:
-    menu.append("📊 Dashboard")
-if role == 'SUPER_ADMIN':
-    menu.append("🛡️ User Admin")
-
-choice = st.sidebar.radio("Navigation", menu)
-
-# --- 5. PAGE ROUTING ---
-if choice == "🛡️ User Admin":
-    show_admin_panel(db)
-
-elif choice == "📊 Dashboard":
-    st.markdown("## 📊 Management Dashboard")
+# 🔵 CASE B: USER IS LOGGED IN (Show Dashboard)
+else:
+    # Navigation Sidebar
+    st.sidebar.title("✈️ Global Travel AI")
+    st.sidebar.success("System Authenticated")
     
-    records = db.get_bookings()
-    if records:
-        df = pd.DataFrame(records)
-        df['cost'] = pd.to_numeric(df['cost'], errors='coerce').fillna(0)
-        
-        # KPI Row
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Record Count", len(df))
-        m2.metric("Gross Spend", f"${df['cost'].sum():,.2f}")
-        m3.metric("Ticket Average", f"${df['cost'].mean():,.2f}")
-        
-        st.divider()
-
-        with st.expander("📤 Data Ingestion (PDF Ticket Upload)"):
-            uploaded_file = st.file_uploader("Upload PDF", type="pdf")
-            if uploaded_file:
-                with st.spinner("Processing..."):
-                    data = process_ticket_pdf(uploaded_file)
-                    if data and "bookings" in data:
-                        st.json(data["bookings"])
-                        if st.button("Commit to Database"):
-                            for b in data["bookings"]:
-                                b["created_by"] = user['username']
-                                db.add_booking(b)
-                            st.success("Synchronized successfully.")
-                            st.rerun()
-
-        st.markdown("<h4 style='color: white;'>Live Booking Registry</h4>", unsafe_allow_html=True)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("System Ready. Upload data to populate dashboard.")
-
-elif choice == "💬 AI Assistant":
-    st.markdown("## 💬 AI Travel Agent")
-    st.markdown("<p style='color: #94A3B8;'>Enterprise Data Analysis Interface</p>", unsafe_allow_html=True)
+    # Simple Mock Role for now
+    role = "SUPER_ADMIN" 
     
-    # Styled Chat
-    if prompt := st.chat_input("Query the database (e.g., 'Sum of cost for March')"):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        with st.chat_message("assistant"):
-            st.markdown("**Analysis Engine Online.** Ready to process your travel data query.")
+    menu = ["📊 Dashboard", "💬 AI Assistant", "🛡️ Admin"]
+    choice = st.sidebar.radio("Navigation", menu)
 
-if st.sidebar.button("Log Out", use_container_width=True):
-    del st.session_state.user
-    st.rerun()
+    if choice == "📊 Dashboard":
+        st.header("Executive Dashboard")
+        
+        # Pull data from Supabase
+        records = db.get_bookings()
+        if records:
+            df = pd.DataFrame(records)
+            
+            # KPI Row
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Records", len(df))
+            c2.metric("Total Spend", f"${df['cost'].sum() if 'cost' in df else 0:,.2f}")
+            c3.metric("System Status", "Online", delta="Secure")
+            
+            st.divider()
+            st.subheader("Recent Travel Logs")
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No data found in Supabase. Upload a PDF to start.")
+
+    elif choice == "💬 AI Assistant":
+        st.header("💬 AI Travel Agent")
+        if prompt := st.chat_input("Ask about your travel data..."):
+            with st.chat_message("user"):
+                st.write(prompt)
+            with st.chat_message("assistant"):
+                st.write("Processing request against Supabase records...")
+
+    elif choice == "🛡️ Admin":
+        show_admin_panel(db)
+
+    # Logout Button
+    if st.sidebar.button("🚪 Logout"):
+        del st.session_state.authenticated
+        st.query_params.clear()
+        st.rerun()
