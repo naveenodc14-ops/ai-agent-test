@@ -9,6 +9,7 @@ db = TravelDB()
 
 # --- 1. AUTHENTICATION GATE ---
 if "user" not in st.session_state:
+    st.image("https://images.unsplash.com/photo-1436491865332-7a61a109c0f3?auto=format&fit=crop&w=800&q=80")
     st.title("✈️ Corporate Travel Portal")
     st.markdown("Please sign in to manage bookings and access AI analysis.")
     
