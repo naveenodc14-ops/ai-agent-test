@@ -4,151 +4,149 @@ from src.database import TravelDB
 from src.admin_panel import show_admin_panel
 from src.ai_processor import process_ticket_pdf
 
-# 1. Page Configuration (This must be the first Streamlit command)
-st.set_page_config(page_title="Travel AI Portal", page_icon="✈️", layout="wide")
+# 1. Page Configuration (The foundation of the UI)
+st.set_page_config(
+    page_title="Global Travel AI", 
+    page_icon="✈️", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Initialize Database
+# Initialize Database Connection
 db = TravelDB()
 
-# 2. Custom CSS for a "Premium" Look
+# 2. Premium Styling (CSS)
 st.markdown("""
     <style>
-    /* Main background color */
-    .stApp { background-color: #F8FAFC; }
+    /* Main Background */
+    .stApp { background-color: #F0F2F6; }
     
-    /* Center headers */
-    .main-title { text-align: center; color: #1E3A8A; font-weight: 800; margin-bottom: 10px; }
-    
-    /* Style buttons */
-    div.stButton > button:first-child {
-        background-color: #2563EB;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        height: 3em;
-        transition: 0.3s;
+    /* Login Form Container */
+    [data-testid="stForm"] {
+        background-color: white;
+        padding: 30px;
+        border-radius: 15px;
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
-    div.stButton > button:hover { background-color: #1E40AF; border: none; }
     
-    /* Card-like containers for data */
-    div[data-testid="stMetricValue"] { color: #1E3A8A; }
+    /* Custom Metric Styling */
+    [data-testid="stMetricValue"] {
+        font-size: 28px;
+        color: #1E3A8A;
+    }
+    
+    /* Button Styling */
+    div.stButton > button:first-child {
+        background-color: #1E3A8A;
+        color: white;
+        border-radius: 10px;
+        font-weight: 600;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. AUTHENTICATION GATE (The Login Page) ---
+# --- 3. LOGIN PAGE (AUTHENTICATION) ---
 if "user" not in st.session_state:
-    # Appetizing Hero Section
-    st.markdown("<h1 class='main-title'>✈️ Global Travel Portal</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-family: sans-serif;'>✈️ Global Travel Portal</h1>", unsafe_allow_html=True)
     
+    # Using a reliable direct image link
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # High-quality Travel Image
-        st.markdown(
-            """
-            <div style="display: flex; justify-content: center;">
-                <img src="https://images.unsplash.com/photo-1436491865332-7a61a109c0f3?auto=format&fit=crop&w=800&q=80" 
-                style="border-radius: 20px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-bottom: 30px;">
-            </div>
-            """, 
-            unsafe_allow_html=True
+        # High-Resolution Hero Image
+        st.image(
+            "https://images.unsplash.com/photo-1464037192329-307c87610c8e?auto=format&fit=crop&w=1200&q=80",
+            caption="Advanced Travel Analytics & PDF Processing",
+            use_container_width=True
         )
 
-        with st.container():
-            st.markdown("<h3 style='text-align: center;'>Secure Sign-In</h3>", unsafe_allow_html=True)
-            with st.form("login_gate"):
-                u = st.text_input("Username", placeholder="Enter your username")
-                p = st.text_input("Password", type="password", placeholder="Enter your password")
-                submit = st.form_submit_button("Access Portal", use_container_width=True)
-                
-                if submit:
-                    user_data = db.login(u, p)
-                    if user_data:
-                        st.session_state.user = user_data
-                        st.success("Welcome back! Loading your dashboard...")
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials. Please contact your administrator.")
+        with st.form("login_gate"):
+            st.markdown("<p style='text-align: center; color: #64748B;'>Enter your credentials to manage travel data</p>", unsafe_allow_html=True)
+            u = st.text_input("Username", placeholder="e.g. admin_boss")
+            p = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Sign In to Portal", use_container_width=True)
+            
+            if submit:
+                user_data = db.login(u, p)
+                if user_data:
+                    st.session_state.user = user_data
+                    st.success("Authentication Successful!")
+                    st.rerun()
+                else:
+                    st.error("Access Denied: Invalid Username or Password")
     st.stop()
 
-# --- 4. POST-LOGIN SESSION SETUP ---
+# --- 4. NAVIGATION & ROLE SETUP ---
 user = st.session_state.user
 role = user.get('roles', {}).get('role_name', 'VIEWER')
 
-# Sidebar Design
-st.sidebar.image("https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?auto=format&fit=crop&w=150&q=80", width=80)
-st.sidebar.title(f"Hello, {user['username']}!")
-st.sidebar.markdown(f"**Role:** `{role}`")
+# Sidebar User Info
+st.sidebar.markdown(f"### 👤 {user['username']}")
+st.sidebar.info(f"Access Level: **{role}**")
 st.sidebar.divider()
 
-menu_options = ["💬 Chat Assistant"]
+# Role-Based Menu
+menu = ["💬 AI Assistant"]
 if role in ['SUPER_ADMIN', 'MANAGER']:
-    menu_options.append("📊 Dashboard & Upload")
+    menu.append("📊 Dashboard")
 if role == 'SUPER_ADMIN':
-    menu_options.append("🛡️ User Management")
+    menu.append("🛡️ User Admin")
 
-choice = st.sidebar.radio("Navigation", menu_options)
+choice = st.sidebar.radio("Navigate Menu", menu)
 
-# --- 5. ROUTING LOGIC ---
+# --- 5. PAGE ROUTING ---
 
-if "🛡️ User Management" in choice:
+if choice == "🛡️ User Admin":
     show_admin_panel(db)
 
-elif "📊 Dashboard & Upload" in choice:
-    st.title("📊 Travel Management Dashboard")
+elif choice == "📊 Dashboard":
+    st.header("📋 Travel Management Dashboard")
     
-    # KPI Section (The "Oracle Exec" View)
+    # A. KPI Metrics Row
     records = db.get_bookings()
-    df = pd.DataFrame(records) if records else None
+    if records:
+        df = pd.DataFrame(records)
+        df['cost'] = pd.to_numeric(df['cost'], errors='coerce').fillna(0)
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Bookings", len(df))
+        m2.metric("Total Spend", f"${df['cost'].sum():,.2f}")
+        m3.metric("Avg Ticket", f"${df['cost'].mean():,.2f}")
+        
+        st.divider()
+        
+        # B. Upload Section (Expander)
+        with st.expander("📤 Process New Tickets (PDF)"):
+            uploaded_file = st.file_uploader("Upload PDF Ticket", type="pdf")
+            if uploaded_file:
+                with st.spinner("AI Agent is reading the PDF..."):
+                    data = process_ticket_pdf(uploaded_file)
+                    if data and "bookings" in data:
+                        st.write("🔍 **Preview Extracted Data:**")
+                        st.json(data["bookings"])
+                        if st.button("Confirm & Save to Supabase"):
+                            for b in data["bookings"]:
+                                b["created_by"] = user['username']
+                                db.add_booking(b)
+                            st.success("Database Updated!")
+                            st.rerun()
 
-    if df is not None:
-        kpi1, kpi2, kpi3 = st.columns(3)
-        with kpi1:
-            st.metric("Total Bookings", len(df))
-        with kpi2:
-            # Ensure 'cost' is numeric
-            total_spend = pd.to_numeric(df['cost']).sum()
-            st.metric("Global Spend", f"${total_spend:,.2f}")
-        with kpi3:
-            top_traveller = df['traveler'].mode()[0] if not df['traveler'].empty else "N/A"
-            st.metric("Top Traveler", top_traveller)
-
-    st.divider()
-
-    # Upload Section
-    with st.expander("➕ Upload & Process New Tickets", expanded=False):
-        uploaded_file = st.file_uploader("Drop ticket PDF here", type="pdf")
-        if uploaded_file:
-            with st.spinner("AI Analysis in progress..."):
-                data = process_ticket_pdf(uploaded_file)
-                if data and "bookings" in data:
-                    st.write("### Review Extracted Data")
-                    st.json(data["bookings"])
-                    if st.button("Confirm and Commit to Supabase"):
-                        for b in data["bookings"]:
-                            b["created_by"] = user['username']
-                            db.add_booking(b)
-                        st.success("Successfully synced with Cloud DB!")
-                        st.rerun()
-
-    # Main Data Table
-    st.subheader("Booking Registry")
-    if df is not None:
+        # C. Data Table
+        st.subheader("Booking History")
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
-        st.info("No bookings found. Upload a PDF to get started.")
+        st.warning("No booking data found in Supabase yet.")
 
-elif "💬 Chat Assistant" in choice:
-    st.title("💬 AI Travel Agent")
-    st.info("Ask me anything about your flight history, costs, or PNR details.")
+elif choice == "💬 AI Assistant":
+    st.header("💬 Travel Agent AI")
+    st.markdown("Ask me questions about your travel records, costs, or routes.")
     
-    # Minimalist Chat Input Placeholder
-    if prompt := st.chat_input("How much did we spend on flights to London?"):
-        # We can add the full Chat Logic we discussed here!
-        st.write(f"You asked: {prompt}")
-        st.warning("Chat logic is ready to be connected to your DB context.")
+    # Placeholder for Chat logic
+    if prompt := st.chat_input("Ex: Show me all flights booked by John Doe"):
+        st.chat_message("user").write(prompt)
+        st.chat_message("assistant").write("I am ready to analyze the database once the RAG connection is established.")
 
 # Logout Logic
-st.sidebar.divider()
-if st.sidebar.button("Log Out", use_container_width=True):
+if st.sidebar.button("🚪 Logout", use_container_width=True):
     del st.session_state.user
     st.rerun()
