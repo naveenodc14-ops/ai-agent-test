@@ -3,33 +3,68 @@ import streamlit as st
 def apply_custom_theme():
     st.markdown("""
         <style>
-        /* General Theme */
+        /* 1. Main Background & Font */
         .stApp {
-            background: linear-gradient(rgba(10, 30, 60, 0.6), rgba(10, 30, 60, 0.6)), 
-                        url("https://images.unsplash.com/photo-1542385151-5184b292a832?q=80&w=2000&auto=format&fit=crop");
-            background-size: cover; background-position: center; background-attachment: fixed;
+            background-color: #F8FAFC; /* Clean off-white/light grey */
+            color: #1E293B;
+        }
+
+        /* 2. Professional Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #0F172A !important; /* Deep Navy */
+            border-right: 1px solid #E2E8F0 !important;
         }
         
-        /* Smaller Chat Line Spacing */
+        [data-testid="stSidebar"] * {
+            color: #F1F5F9 !important;
+        }
+
+        /* 3. Chat Interface - Tighter & Modern */
         [data-testid="stChatMessage"] {
-            padding: 0.5rem 1rem !important; /* Reduced padding */
-            margin-bottom: 0.5rem !important; /* Tighter gap between messages */
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border-radius: 8px !important;
+            padding: 0.6rem 1rem !important;
+            margin-bottom: 0.4rem !important;
+            border-radius: 12px !important;
+            border: 1px solid #E2E8F0 !important;
         }
         
+        /* User messages (Indigo bubble) */
+        [data-testid="stChatMessage"][data-testid="user"] {
+            background-color: #EEF2FF !important; /* Light Indigo */
+            border-left: 4px solid #4F46E5 !important;
+        }
+        
+        /* Assistant messages (Slate bubble) */
+        [data-testid="stChatMessage"][data-testid="assistant"] {
+            background-color: #FFFFFF !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        }
+
         [data-testid="stChatMessage"] p {
-            margin-bottom: 0px !important; /* Remove bottom margin from text */
-            line-height: 1.3 !important;   /* Tighter line height */
-            font-size: 0.95rem !important;
+            line-height: 1.4 !important;
+            font-size: 0.92rem !important;
+            color: #334155 !important;
         }
 
-        .main-title {
-            background: linear-gradient(90deg, #00CFFF, #00FF88);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            text-align: center; font-weight: 800; font-size: 3rem;
+        /* 4. Page Headers */
+        .page-header {
+            color: #1E293B;
+            font-weight: 700;
+            border-bottom: 2px solid #4F46E5;
+            padding-bottom: 5px;
+            margin-bottom: 20px;
         }
 
-        [data-testid="stSidebar"] { background-color: #081121 !important; border-right: 2px solid #00FF88 !important; }
+        /* 5. Inputs & Buttons */
+        div.stButton > button {
+            background-color: #4F46E5 !important; /* Indigo */
+            color: white !important;
+            border-radius: 6px !important;
+            border: none !important;
+            font-weight: 600 !important;
+        }
+        
+        div.stButton > button:hover {
+            background-color: #4338CA !important;
+        }
         </style>
     """, unsafe_allow_html=True)
