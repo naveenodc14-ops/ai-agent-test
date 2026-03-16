@@ -8,135 +8,128 @@ from src.ai_processor import process_ticket_pdf
 st.set_page_config(page_title="Global Travel AI", page_icon="✈️", layout="wide")
 db = TravelDB()
 
-# 2. HIGH-CONTRAST DARK THEME (Fixes "Invisible" Login Box)
+# 2. THE "LUCID DARK" THEME (Balanced visibility and style)
 st.markdown("""
     <style>
-    /* Main Background with Heavy Dark Overlay */
+    /* 1. Background: Lightened the overlay to let the airplane show through */
     .stApp {
-        background: linear-gradient(rgba(5, 10, 25, 0.92), rgba(5, 10, 25, 0.92)), 
+        background: linear-gradient(rgba(15, 32, 64, 0.7), rgba(15, 32, 64, 0.7)), 
                     url("https://images.unsplash.com/photo-1542385151-5184b292a832?q=80&w=2000&auto=format&fit=crop");
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
     }
 
-    /* SOLID LOGIN CARD (No longer invisible) */
+    /* 2. Login Card: Frosted Glass with a Cyan Glow */
     [data-testid="stForm"] {
-        background-color: #0F172A !important; /* Solid Dark Navy */
-        border: 2px solid #1E40AF !important; /* Bright Blue Border */
+        background-color: rgba(15, 23, 42, 0.9) !important; 
+        border: 1px solid rgba(0, 255, 255, 0.4) !important;
         padding: 50px !important;
-        border-radius: 16px !important;
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.7) !important;
+        border-radius: 20px !important;
+        box-shadow: 0 0 30px rgba(0, 207, 255, 0.2) !important;
     }
 
-    /* HIGH VISIBILITY INPUT FIELDS */
+    /* 3. Input Fields: High Contrast Text */
     .stTextInput input {
-        background-color: #1E293B !important; /* Lighter navy for contrast */
-        color: #FFFFFF !important;
-        border: 1px solid #3B82F6 !important; /* Visible blue border */
+        background-color: #F8FAFC !important; /* White background for inputs to ensure zero clumsiness */
+        color: #0F172A !important;
+        border: 2px solid #3B82F6 !important;
         border-radius: 8px !important;
-        height: 45px !important;
     }
     
-    /* Make labels bright and visible */
     label {
-        color: #60A5FA !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
+        color: #F8FAFC !important;
+        font-weight: 700 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
-    /* LOGIN BUTTON - SOLID BLUE */
+    /* 4. The LOGIN Button: Vibrant Blue */
     div.stButton > button {
-        background: #2563EB !important;
+        background: linear-gradient(90deg, #2563EB, #00CFFF) !important;
         color: white !important;
         border: none !important;
         border-radius: 8px !important;
-        width: 100%;
-        padding: 12px !important;
-        font-weight: 700 !important;
-        margin-top: 10px;
-        transition: 0.3s ease;
-    }
-    div.stButton > button:hover {
-        background: #3B82F6 !important;
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5) !important;
+        font-weight: 800 !important;
+        height: 50px;
     }
 
-    /* TITLE STYLING */
-    .main-title {
-        color: #FFFFFF !important;
-        text-align: center;
-        font-weight: 800;
-        font-size: 3rem;
-        margin-bottom: 5px;
-        letter-spacing: -1px;
+    /* 5. Metrics & Containers in the Dashboard */
+    div[data-testid="stMetric"], .stDataFrame {
+        background-color: rgba(255, 255, 255, 0.95) !important;
+        color: #0F172A !important;
+        padding: 15px !important;
+        border-radius: 12px !important;
     }
     
-    /* Sidebar Styling */
+    /* 6. Sidebar: Professional Navy */
     [data-testid="stSidebar"] {
-        background-color: #020617 !important;
+        background-color: #1E293B !important;
+    }
+    
+    .main-title {
+        color: #FFFFFF;
+        text-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+        text-align: center;
+        font-weight: 800;
+        font-size: 3.5rem;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. LOGIN GATE ---
 if "user" not in st.session_state:
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 class='main-title'>TRAVEL AI SYSTEM</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 20px;'>Enterprise Logistics Gateway</p>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>TRAVEL AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #E2E8F0; font-size: 1.2rem;'>Secure Logistics Management</p>", unsafe_allow_html=True)
     
-    # centering the login card
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         with st.form("login_form"):
-            u = st.text_input("USER ID")
-            p = st.text_input("PASSWORD", type="password")
-            
+            u = st.text_input("Username")
+            p = st.text_input("Password", type="password")
             if st.form_submit_button("LOGIN"):
                 user_data = db.login(u, p)
                 if user_data:
                     st.session_state.user = user_data
                     st.rerun()
                 else:
-                    st.error("Authentication Denied.")
+                    st.error("Access Denied")
     st.stop()
 
-# --- 4. APP INTERFACE ---
+# --- 4. DASHBOARD ---
 user = st.session_state.user
 role = user.get('roles', {}).get('role_name', 'VIEWER')
 
-st.sidebar.markdown(f"<h3 style='color: #60A5FA;'>User: {user['username']}</h3>", unsafe_allow_html=True)
-st.sidebar.markdown(f"**Security Level:** `{role}`")
+st.sidebar.markdown(f"<h3 style='color: #00CFFF;'>Welcome, {user['username']}</h3>", unsafe_allow_html=True)
+st.sidebar.write(f"Level: `{role}`")
 st.sidebar.divider()
 
 menu = ["📊 Dashboard", "💬 AI Assistant"]
 if role == 'SUPER_ADMIN': menu.append("🛡️ Admin")
-choice = st.sidebar.radio("Navigation", menu)
+choice = st.sidebar.radio("Menu", menu)
 
 if choice == "📊 Dashboard":
-    st.markdown("## 📊 Executive Analytics")
+    st.header("Executive Summary")
     records = db.get_bookings()
     if records:
         df = pd.DataFrame(records)
         m1, m2, m3 = st.columns(3)
-        m1.metric("Active Logs", len(df))
+        # Note: We keep metrics clean and white for readability
+        m1.metric("Total Trips", len(df))
         m2.metric("Total Spend", f"${pd.to_numeric(df['cost'], errors='coerce').sum():,.2f}")
-        m3.metric("Network Status", "Secure")
+        m3.metric("System", "Verified")
         st.divider()
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True)
     else:
-        st.info("No records found.")
+        st.info("System Ready. No records found.")
 
 elif choice == "💬 AI Assistant":
-    st.markdown("## 💬 AI Analyst")
-    if prompt := st.chat_input("Ask about travel spending..."):
-        with st.chat_message("user"): st.write(prompt)
-        with st.chat_message("assistant"): st.write("Querying database...")
+    st.header("💬 AI Travel Agent")
+    if prompt := st.chat_input("Ask a question..."):
+        st.chat_message("user").write(prompt)
+        st.chat_message("assistant").write("Analyzing database...")
 
-elif choice == "🛡️ Admin":
-    show_admin_panel(db)
-
-# Logout
-if st.sidebar.button("🚪 Logout", use_container_width=True):
+if st.sidebar.button("🚪 Logout"):
     del st.session_state.user
     st.rerun()
