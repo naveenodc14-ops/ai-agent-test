@@ -21,41 +21,36 @@ if "user" not in st.session_state:
             if st.form_submit_button("Login"):
                 user_record = db.login(u, p)
                 if user_record:
-                    # If DB returns a list (common in Supabase), grab the first record
+                    # Supabase often returns a list; we grab the first record
                     st.session_state.user = user_record[0] if isinstance(user_record, list) else user_record
                     st.rerun()
                 else: 
                     st.error("Invalid credentials.")
     st.stop()
 
-# --- 3. DYNAMIC ROLE DETECTION (The Fix) ---
+# --- 3. THE ROLE_ID FIX ---
 user_data = st.session_state.user
-is_admin = False
 
-# This loop checks EVERY column in your user record for admin keywords
-# This prevents the "wrong column" issue entirely.
-ADMIN_KEYWORDS = ['super_admin', 'admin_boss', 'admin']
+# We check for role_id 1 (Integer or String '1') based on your manual SQL insert
+# Using .get() prevents the app from crashing if the column is missing
+role_id = user_data.get('role_id')
 
-for key, value in user_data.items():
-    val_str = str(value).lower().strip()
-    if val_str in ADMIN_KEYWORDS:
-        is_admin = True
-        break
+# Logical check for Admin access
+is_admin = str(role_id) == '1'
 
-# --- 4. Navigation Construction ---
+# --- 4. Navigation ---
 menu = ["📊 Dashboard", "💬 AI Assistant"]
 if is_admin:
     menu.append("🛡️ Admin")
 
 choice = st.sidebar.radio("Navigation", menu)
 
-# Sidebar Info
+# Sidebar Info for Clarity
 st.sidebar.markdown("---")
-st.sidebar.write(f"Logged in as: **{user_data.get('username', 'User')}**")
-if is_admin:
-    st.sidebar.success("Mode: Administrator")
+st.sidebar.write(f"User: **{user_data.get('username')}**")
+st.sidebar.write(f"Access Level ID: **{role_id}**")
 
-# --- 5. Data & Routing ---
+# --- 5. Routing ---
 try:
     df = pd.DataFrame(db.get_bookings())
 except:
@@ -78,7 +73,7 @@ elif choice == "💬 AI Assistant":
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    if prompt := st.chat_input("Ask about travelers or logistics..."):
+    if prompt := st.chat_input("Query travel data..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -88,9 +83,7 @@ elif choice == "💬 AI Assistant":
                 response = get_ai_response(prompt, df)
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
-            else:
-                st.warning("No data available to analyze.")
 
-if st.sidebar.button("Logout", use_container_width=True):
+if st.sidebar.button("Logout"):
     st.session_state.clear()
     st.rerun()
