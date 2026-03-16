@@ -5,12 +5,12 @@ from src.styles import apply_custom_theme
 from src.ai_agent import get_ai_response
 from src.admin_panel import show_admin_panel
 
-# --- Initialization ---
+# Init
 st.set_page_config(page_title="Voyage Intel", layout="wide")
 apply_custom_theme()
 db = TravelDB()
 
-# --- Authentication Logic ---
+# --- Auth Gate ---
 if "user" not in st.session_state:
     st.markdown("<h1 style='text-align:center; color:#4F46E5;'>Voyage Intelligence Hub</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -19,37 +19,39 @@ if "user" not in st.session_state:
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
             if st.form_submit_button("Login"):
-                user = db.login(u, p)
-                if user:
-                    st.session_state.user = user
+                user_record = db.login(u, p)
+                if user_record:
+                    st.session_state.user = user_record
                     st.rerun()
-                else: 
-                    st.error("Invalid credentials.")
+                else: st.error("Invalid credentials.")
     st.stop()
 
-# --- Role Detection ---
-user_data = st.session_state.user
-# Handle nested role data or flat strings
-role = user_data.get('role', 'VIEWER')
-if isinstance(role, dict):
-    role = role.get('role_name', 'VIEWER')
+# --- ROLE LOGIC (The critical part) ---
+user = st.session_state.user
+# Pull role and convert to lowercase for safe comparison
+role_val = str(user.get('role', 'VIEWER')).lower()
 
-# Define Admin Access (including your custom 'admin' string)
-ADMIN_LIST = ['SUPER_ADMIN', 'admin_boss', 'admin']
-is_admin = str(role) in ADMIN_LIST
+# ACCESS LIST: This captures 'SUPER_ADMIN', 'admin_boss', and your manual 'admin'
+ADMIN_ACCESS_LEVELS = ['super_admin', 'admin_boss', 'admin']
+is_admin = role_val in ADMIN_ACCESS_LEVELS
 
-# Data Loading
+# Load Travel Data
 df = pd.DataFrame(db.get_bookings())
 
-# --- Sidebar Navigation ---
-st.sidebar.title("System Menu")
-menu = ["📊 Dashboard", "💬 AI Assistant"]
+# --- Navigation ---
+st.sidebar.title("Main Menu")
+options = ["📊 Dashboard", "💬 AI Assistant"]
+
+# Only append Admin if the check passes
 if is_admin:
-    menu.append("🛡️ Admin")
+    options.append("🛡️ Admin")
+else:
+    # Optional: Visual indicator for users that they are not admins
+    st.sidebar.info(f"Signed in as {role_val}")
 
-choice = st.sidebar.radio("Navigate to:", menu)
+choice = st.sidebar.radio("Navigate", options)
 
-# --- Page Routing ---
+# --- Routing ---
 if choice == "📊 Dashboard":
     st.markdown("<h2 class='page-header'>Executive Dashboard</h2>", unsafe_allow_html=True)
     st.dataframe(df, use_container_width=True)
@@ -59,25 +61,20 @@ elif choice == "🛡️ Admin":
 
 elif choice == "💬 AI Assistant":
     st.markdown("<h2 class='page-header'>Voyage Intelligence Hub</h2>", unsafe_allow_html=True)
+    if "messages" not in st.session_state: st.session_state.messages = []
     
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    # Display Persistent Chat
     for m in st.session_state.messages:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+        with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    if prompt := st.chat_input("Ask about travelers or logistics..."):
+    if prompt := st.chat_input("Ask about travelers..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
         
         with st.chat_message("assistant"):
-            response = get_ai_response(prompt, df)
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            ans = get_ai_response(prompt, df)
+            st.markdown(ans)
+            st.session_state.messages.append({"role": "assistant", "content": ans})
 
-# Logout
-if st.sidebar.button("Logout", use_container_width=True):
+if st.sidebar.button("Logout"):
     st.session_state.clear()
     st.rerun()
