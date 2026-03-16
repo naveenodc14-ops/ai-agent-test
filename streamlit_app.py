@@ -82,9 +82,44 @@ elif choice == "Dashboard & Upload":
 
 elif choice == "Chat Assistant":
     st.header("💬 Travel AI Assistant")
-    st.markdown("Ask questions about travel spend, routes, or specific PNRs.")
-    # (Your Chat logic will live here - for now, just a placeholder)
-    st.chat_input("How much did we spend on travel in March?")
+    
+    # 1. Initialize Chat History
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # 2. Display Chat History
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # 3. Chat Input
+    if prompt := st.chat_input("Ask me about travel spend or PNRs..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing database..."):
+                # 4. Fetch the data for the AI to read
+                all_data = db.get_bookings()
+                # Convert to a string context for the LLM
+                context = pd.DataFrame(all_data).to_string()
+                
+                # 5. Send to Groq
+                from groq import Groq
+                client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+                
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": f"You are a travel data analyst. Use this data to answer questions:\n{context}"},
+                        *st.session_state.messages
+                    ]
+                )
+                full_response = response.choices[0].message.content
+                st.markdown(full_response)
+        
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # Logout Button at the bottom of the sidebar
 if st.sidebar.button("🚪 Log Out"):
