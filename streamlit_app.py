@@ -1,158 +1,135 @@
 import streamlit as st
 import pandas as pd
+import os
 from src.database import TravelDB
 from src.admin_panel import show_admin_panel
 from src.ai_processor import process_ticket_pdf
 
-# 1. Page Configuration (Sets the browser tab title and wide layout)
+# 1. Page Configuration
 st.set_page_config(
     page_title="Global Travel AI Portal", 
     page_icon="✈️", 
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Initialize Database Connection
+# Initialize Database
 db = TravelDB()
 
-# 2. Premium UI Styling (CSS)
+# 2. Premium Styling
 st.markdown("""
     <style>
-    /* Main Background */
-    .stApp { background-color: #F1F5F9; }
-    
-    /* Login Form Styling */
+    .stApp { background-color: #F8FAFC; }
     [data-testid="stForm"] {
         background-color: white;
-        padding: 40px;
+        padding: 30px;
         border-radius: 15px;
         border: 1px solid #E2E8F0;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     }
-    
-    /* Custom Metric Styling */
-    [data-testid="stMetricValue"] {
-        font-size: 32px;
-        color: #1E40AF;
-        font-weight: 700;
-    }
-    
-    /* Button Hover Effects */
-    div.stButton > button:first-child {
-        background-color: #1E40AF;
-        color: white;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
-    div.stButton > button:hover {
-        background-color: #1D4ED8;
-        transform: translateY(-2px);
+    .main-title {
+        text-align: center;
+        color: #1E3A8A;
+        font-family: 'Helvetica Neue', sans-serif;
+        padding: 20px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. AUTHENTICATION GATE (Login Screen) ---
+# --- 3. AUTHENTICATION GATE ---
 if "user" not in st.session_state:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A; margin-top: -50px;'>✈️ Corporate Travel Portal</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>✈️ Corporate Travel Portal</h1>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Professional Hero Image
-        st.image(
-            "https://images.unsplash.com/photo-1436491865332-7a61a109c0f3?q=80&w=1200&auto=format&fit=crop",
-            caption="Advanced AI-Powered Travel Management",
-            use_container_width=True
-        )
+        # --- THE IMAGE FIX ---
+        # Checks if you uploaded 'banner.jpg' to your GitHub
+        if os.path.exists("banner.jpg"):
+            st.image("banner.jpg", use_container_width=True)
+        else:
+            # Fallback if image is missing: A nice colored block
+            st.markdown("""
+                <div style="background-color: #1E3A8A; height: 200px; border-radius: 15px; 
+                display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                    <h2 style="color: white;">Travel Management System</h2>
+                </div>
+            """, unsafe_allow_html=True)
 
         with st.form("login_gate"):
-            st.markdown("<h3 style='text-align: center; color: #475569;'>Sign In</h3>", unsafe_allow_html=True)
-            u = st.text_input("Username", placeholder="e.g. admin_boss")
+            st.markdown("<p style='text-align: center;'>Please sign in to continue</p>", unsafe_allow_html=True)
+            u = st.text_input("Username")
             p = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Access Dashboard", use_container_width=True)
+            submit = st.form_submit_button("Sign In", use_container_width=True)
             
             if submit:
                 user_data = db.login(u, p)
                 if user_data:
                     st.session_state.user = user_data
-                    st.success("Authentication Successful! Redirecting...")
                     st.rerun()
                 else:
-                    st.error("Invalid credentials. Please try again or contact IT.")
+                    st.error("Invalid credentials.")
     st.stop()
 
-# --- 4. NAVIGATION & SESSION SETUP ---
+# --- 4. SESSION SETUP ---
 user = st.session_state.user
 role = user.get('roles', {}).get('role_name', 'VIEWER')
 
-# Sidebar Design
-st.sidebar.markdown(f"### 👤 {user['username']}")
-st.sidebar.markdown(f"**Access:** `{role}`")
+# Sidebar
+st.sidebar.title(f"Welcome, {user['username']}")
+st.sidebar.markdown(f"**Access Level:** `{role}`")
 st.sidebar.divider()
 
-# Define menu options based on role
-menu = ["💬 AI Assistant"]
+menu = ["💬 Chat Assistant"]
 if role in ['SUPER_ADMIN', 'MANAGER']:
-    menu.append("📊 Manager Dashboard")
+    menu.append("📊 Dashboard")
 if role == 'SUPER_ADMIN':
-    menu.append("🛡️ User Administration")
+    menu.append("🛡️ Admin Panel")
 
-choice = st.sidebar.radio("Main Menu", menu)
+choice = st.sidebar.radio("Navigation", menu)
 
-# --- 5. PAGE ROUTING ---
-
-if choice == "🛡️ User Administration":
-    # Logic imported from src/admin_panel.py
+# --- 5. ROUTING ---
+if choice == "🛡️ Admin Panel":
     show_admin_panel(db)
 
-elif choice == "📊 Manager Dashboard":
-    st.title("📊 Travel Analytics Dashboard")
+elif choice == "📊 Dashboard":
+    st.header("📊 Travel Dashboard")
     
-    # KPI Section (The "Exec" view)
+    # KPI Cards
     records = db.get_bookings()
     if records:
         df = pd.DataFrame(records)
         df['cost'] = pd.to_numeric(df['cost'], errors='coerce').fillna(0)
         
-        kpi1, kpi2, kpi3 = st.columns(3)
-        kpi1.metric("Total Trips", len(df))
-        kpi2.metric("Annual Spend", f"${df['cost'].sum():,.2f}")
-        kpi3.metric("Avg Ticket Price", f"${df['cost'].mean():,.2f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Trips", len(df))
+        c2.metric("Total Cost", f"${df['cost'].sum():,.2f}")
+        c3.metric("Avg Spend", f"${df['cost'].mean():,.2f}")
         
         st.divider()
-        
-        # Upload Section
-        with st.expander("📤 Add New Travel Log (PDF Upload)", expanded=False):
-            uploaded_file = st.file_uploader("Upload Flight Ticket", type="pdf")
-            if uploaded_file:
-                with st.spinner("AI analyzing ticket data..."):
-                    data = process_ticket_pdf(uploaded_file)
-                    if data and "bookings" in data:
-                        st.write("### ✅ Extracted Data")
-                        st.json(data["bookings"])
-                        if st.button("Save to Cloud Database"):
-                            for b in data["bookings"]:
-                                b["created_by"] = user['username']
-                                db.add_booking(b)
-                            st.success("Database Updated Successfully!")
-                            st.rerun()
 
-        # Detailed Table
-        st.subheader("Global Booking Log")
+        # Upload Area
+        with st.expander("📤 Process New PDF Ticket"):
+            uploaded_file = st.file_uploader("Choose a file", type="pdf")
+            if uploaded_file:
+                data = process_ticket_pdf(uploaded_file)
+                if data:
+                    st.json(data)
+                    if st.button("Save to Database"):
+                        for b in data.get("bookings", []):
+                            b["created_by"] = user['username']
+                            db.add_booking(b)
+                        st.success("Saved!")
+                        st.rerun()
+
+        st.subheader("Recent Bookings")
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
-        st.info("No data available yet. Please upload a ticket to begin.")
+        st.info("No data found.")
 
-elif choice == "💬 AI Assistant":
-    st.title("💬 Smart Travel Agent")
-    st.markdown("Ask natural language questions about traveler patterns or costs.")
-    
-    # Placeholder for Chat logic (You can integrate the full RAG chat here)
-    if prompt := st.chat_input("Ex: How much did we spend on flights to Dubai last month?"):
+elif choice == "💬 Chat Assistant":
+    st.header("💬 Travel AI")
+    if prompt := st.chat_input("Ask a question..."):
         st.chat_message("user").write(prompt)
-        st.chat_message("assistant").write("Analyzing the database... (Full AI Chat logic ready for connection).")
+        st.chat_message("assistant").write("I am ready to analyze your travel data.")
 
-# Logout Button at bottom of Sidebar
-st.sidebar.divider()
-if st.sidebar.button("🚪 Logout", use_container_width=True):
+if st.sidebar.button("Log Out"):
     del st.session_state.user
     st.rerun()
