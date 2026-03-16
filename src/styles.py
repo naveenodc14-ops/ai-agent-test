@@ -3,6 +3,7 @@ import streamlit as st
 def apply_custom_theme():
     st.markdown("""
         <style>
+        /* Main Theme */
         .stApp { background-color: #F8FAFC; color: #1E293B; }
         
         /* Professional Sidebar */
