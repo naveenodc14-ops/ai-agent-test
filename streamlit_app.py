@@ -21,22 +21,22 @@ if "user" not in st.session_state:
             if st.form_submit_button("Login"):
                 user_record = db.login(u, p)
                 if user_record:
-                    # Supabase often returns a list; we grab the first record
+                    # Handle Supabase list return or single dict return
                     st.session_state.user = user_record[0] if isinstance(user_record, list) else user_record
                     st.rerun()
                 else: 
                     st.error("Invalid credentials.")
     st.stop()
 
-# --- 3. THE ROLE_ID FIX ---
+# --- 3. LOGIC & ROLE CHECK ---
 user_data = st.session_state.user
 
-# We check for role_id 1 (Integer or String '1') based on your manual SQL insert
-# Using .get() prevents the app from crashing if the column is missing
+# Use role_id for the logic check (Admin = 1)
 role_id = user_data.get('role_id')
-
-# Logical check for Admin access
 is_admin = str(role_id) == '1'
+
+# Use username for the UI display
+login_name = user_data.get('username', 'Guest')
 
 # --- 4. Navigation ---
 menu = ["📊 Dashboard", "💬 AI Assistant"]
@@ -45,12 +45,13 @@ if is_admin:
 
 choice = st.sidebar.radio("Navigation", menu)
 
-# Sidebar Info for Clarity
+# --- SIDEBAR UI (Showing Name instead of ID) ---
 st.sidebar.markdown("---")
-st.sidebar.write(f"User: **{user_data.get('username')}**")
-st.sidebar.write(f"Access Level ID: **{role_id}**")
+st.sidebar.markdown(f"👤 Logged in as: **{login_name}**")
+if is_admin:
+    st.sidebar.success("Mode: Administrator")
 
-# --- 5. Routing ---
+# --- 5. Data & Routing ---
 try:
     df = pd.DataFrame(db.get_bookings())
 except:
@@ -73,7 +74,7 @@ elif choice == "💬 AI Assistant":
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    if prompt := st.chat_input("Query travel data..."):
+    if prompt := st.chat_input("Ask a question about the data..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -83,7 +84,9 @@ elif choice == "💬 AI Assistant":
                 response = get_ai_response(prompt, df)
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
+            else:
+                st.warning("No data available for AI analysis.")
 
-if st.sidebar.button("Logout"):
+if st.sidebar.button("Logout", use_container_width=True):
     st.session_state.clear()
     st.rerun()
