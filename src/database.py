@@ -17,31 +17,21 @@ class TravelDB:
 
     def login(self, username, password):
         try:
-            # 1. Fetch the user record (Trim whitespace to avoid common entry errors)
+            # We now filter by username, password, AND active status
             res = self.supabase.table("profiles")\
                 .select("*")\
                 .eq("username", username.strip())\
                 .eq("password", password.strip())\
+                .eq("status", "active")\
                 .execute()
             
             if res.data:
                 user = res.data[0]
-                
-                # 2. Manual Status Check (Defensive Logic)
-                # If 'status' is missing or NULL, we treat it as 'active' to avoid lockouts
-                user_status = user.get('status', 'active') 
-                if user_status is None: user_status = 'active'
-                
-                if user_status.lower() == 'inactive':
-                    st.error("This account has been deactivated by an administrator.")
-                    return None
-                
                 user['role_display'] = self._map_role(user.get('role_id'))
                 return user
-            
             return None
         except Exception as e:
-            st.error(f"Database Query Error: {e}")
+            st.error(f"Login Error: {e}")
             return None
 
     def create_user(self, username, password, role_id):
@@ -58,6 +48,7 @@ class TravelDB:
 
     def toggle_user_status(self, username, current_status):
         try:
+            # Switch between active and inactive
             new_status = "inactive" if current_status == "active" else "active"
             self.supabase.table("profiles")\
                 .update({"status": new_status})\
