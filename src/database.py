@@ -17,25 +17,41 @@ class TravelDB:
 
     def login(self, username, password):
         try:
-            # Added status check to the query
+            # 1. Fetch the user record (Trim whitespace to avoid common entry errors)
             res = self.supabase.table("profiles")\
                 .select("*")\
-                .eq("username", username)\
-                .eq("password", password)\
-                .eq("status", "active")\
+                .eq("username", username.strip())\
+                .eq("password", password.strip())\
                 .execute()
             
             if res.data:
                 user = res.data[0]
+                
+                # 2. Manual Status Check (Defensive Logic)
+                # If 'status' is missing or NULL, we treat it as 'active' to avoid lockouts
+                user_status = user.get('status', 'active') 
+                if user_status is None: user_status = 'active'
+                
+                if user_status.lower() == 'inactive':
+                    st.error("This account has been deactivated by an administrator.")
+                    return None
+                
                 user['role_display'] = self._map_role(user.get('role_id'))
                 return user
+            
             return None
-        except: return None
+        except Exception as e:
+            st.error(f"Database Query Error: {e}")
+            return None
 
     def create_user(self, username, password, role_id):
         try:
-            # Defaulting new users to 'active'
-            data = {"username": username, "password": password, "role_id": role_id, "status": "active"}
+            data = {
+                "username": username.strip(), 
+                "password": password.strip(), 
+                "role_id": role_id, 
+                "status": "active"
+            }
             self.supabase.table("profiles").insert(data).execute()
             return True
         except: return False
