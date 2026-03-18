@@ -8,41 +8,27 @@ def show_ai_assistant(df):
         st.session_state.messages = []
 
     for m in st.session_state.messages:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+        with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    if prompt := st.chat_input("Ask a specific question..."):
+    if prompt := st.chat_input("Ask about the travel data..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        with st.chat_message("user"): st.markdown(prompt)
         
         with st.chat_message("assistant"):
             try:
                 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-                csv_context = df.to_csv(index=False)
+                csv_data = df.to_csv(index=False)
                 
-                # STRICT SYSTEM PROMPT
-                messages = [
-                    {
-                        "role": "system", 
-                        "content": (
-                            "You are a strict data analyst. Answer the user's question "
-                            "using ONLY the provided CSV data. If the answer is not in the data, "
-                            "say 'Information not available'. DO NOT provide general advice, "
-                            "DO NOT give long explanations, and DO NOT summarize the data unless asked."
-                        )
-                    },
-                    {"role": "user", "content": f"Data Context:\n{csv_context}\n\nQuestion: {prompt}"}
-                ]
-                
-                completion = client.chat.completions.create(
+                response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=messages,
-                    temperature=0.0 # Set to 0 to prevent "creativity"
+                    messages=[
+                        {"role": "system", "content": "You are a data analyst. Answer ONLY based on the provided CSV data. Be concise. If data is missing, say 'No record found'."},
+                        {"role": "user", "content": f"Data:\n{csv_data}\n\nQuestion: {prompt}"}
+                    ],
+                    temperature=0.0
                 )
-                
-                response = completion.choices[0].message.content
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                ans = response.choices[0].message.content
+                st.markdown(ans)
+                st.session_state.messages.append({"role": "assistant", "content": ans})
             except Exception as e:
-                st.error(f"AI Error: {e}")
+                st.error(f"AI offline: {e}")
