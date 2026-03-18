@@ -1,51 +1,34 @@
 import streamlit as st
-from supabase import create_client, Client
+from groq import Groq
 
-class TravelDB:
-    def __init__(self):
-        try:
-            self.url = st.secrets["SUPABASE_URL"]
-            self.key = st.secrets["SUPABASE_KEY"]
-            self.supabase: Client = create_client(self.url, self.key)
-        except Exception as e:
-            st.error(f"DB Connection Error: {e}")
+def show_ai_assistant(df):
+    st.markdown("<h2 class='page-header'>Voyage Intelligence Hub</h2>", unsafe_allow_html=True)
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    def _get_role_name(self, role_id):
-        # Centralized mapping for the UI
-        mapping = {1: "SUPER_ADMIN", 2: "MANAGER", 3: "USER"}
-        return mapping.get(int(role_id), "VIEWER")
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    def login(self, username, password):
-        try:
-            response = self.supabase.table("profiles")\
-                .select("*")\
-                .eq("username", username)\
-                .eq("password", password)\
-                .execute()
-            
-            if response.data:
-                user = response.data[0]
-                # Attach the display name based on the ID
-                user['role_display'] = self._get_role_name(user.get('role_id'))
-                return user
-            return None
-        except Exception as e:
-            st.error(f"Login failed: {e}")
-            return None
-
-    def get_all_users(self):
-        try:
-            response = self.supabase.table("profiles").select("*").execute()
-            data = response.data
-            for user in data:
-                user['role_display'] = self._get_role_name(user.get('role_id'))
-            return data
-        except Exception:
-            return []
-
-    def get_bookings(self):
-        try:
-            res = self.supabase.table("bookings").select("*").execute()
-            return res.data
-        except:
-            return []
+    if prompt := st.chat_input("Ask about the travel data..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.markdown(prompt)
+        
+        with st.chat_message("assistant"):
+            try:
+                client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+                csv_data = df.to_csv(index=False)
+                
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": "You are a data analyst. Answer ONLY based on the provided CSV data. Be concise. If data is missing, say 'No record found'."},
+                        {"role": "user", "content": f"Data:\n{csv_data}\n\nQuestion: {prompt}"}
+                    ],
+                    temperature=0.0
+                )
+                ans = response.choices[0].message.content
+                st.markdown(ans)
+                st.session_state.messages.append({"role": "assistant", "content": ans})
+            except Exception as e:
+                st.error(f"AI offline: {e}")
