@@ -5,6 +5,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
 import pandas as pd
 from streamlit_option_menu import option_menu
+# At the top with other imports
+from src.dashboard import show_dashboard 
+
+# Inside your routing logic
+if selected == "Dashboard":
+    show_dashboard(db)
 from src.database import TravelDB
 from src.styles import apply_custom_theme
 from src.admin_panel import show_admin_panel
