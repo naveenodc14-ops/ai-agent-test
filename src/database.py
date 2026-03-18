@@ -1,34 +1,44 @@
 import streamlit as st
-from groq import Groq
+from supabase import create_client, Client
 
-def show_ai_assistant(df):
-    st.markdown("<h2 class='page-header'>Voyage Intelligence Hub</h2>", unsafe_allow_html=True)
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+class TravelDB:
+    def __init__(self):
+        try:
+            self.supabase: Client = create_client(
+                st.secrets["SUPABASE_URL"], 
+                st.secrets["SUPABASE_KEY"]
+            )
+        except Exception as e:
+            st.error(f"Connection Failed: {e}")
 
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]): st.markdown(m["content"])
+    def _map_role(self, role_id):
+        mapping = {1: "SUPER_ADMIN", 2: "MANAGER", 3: "USER"}
+        return mapping.get(int(role_id), "GUEST")
 
-    if prompt := st.chat_input("Ask about the travel data..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
-        
-        with st.chat_message("assistant"):
-            try:
-                client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-                csv_data = df.to_csv(index=False)
-                
-                response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": "You are a data analyst. Answer ONLY based on the provided CSV data. Be concise. If data is missing, say 'No record found'."},
-                        {"role": "user", "content": f"Data:\n{csv_data}\n\nQuestion: {prompt}"}
-                    ],
-                    temperature=0.0
-                )
-                ans = response.choices[0].message.content
-                st.markdown(ans)
-                st.session_state.messages.append({"role": "assistant", "content": ans})
-            except Exception as e:
-                st.error(f"AI offline: {e}")
+    def login(self, username, password):
+        try:
+            res = self.supabase.table("profiles").select("*").eq("username", username).eq("password", password).execute()
+            if res.data:
+                user = res.data[0]
+                user['role_display'] = self._map_role(user.get('role_id'))
+                return user
+            return None
+        except:
+            return None
+
+    def get_all_users(self):
+        try:
+            res = self.supabase.table("profiles").select("*").execute()
+            data = res.data
+            for u in data:
+                u['role_display'] = self._map_role(u.get('role_id'))
+            return data
+        except:
+            return []
+
+    def get_bookings(self):
+        try:
+            res = self.supabase.table("bookings").select("*").execute()
+            return res.data
+        except:
+            return []
