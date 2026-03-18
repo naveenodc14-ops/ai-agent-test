@@ -4,42 +4,42 @@ import bcrypt
 
 class TravelDB:
     def __init__(self):
-        try:
-            self.supabase: Client = create_client(
-                st.secrets["SUPABASE_URL"], 
-                st.secrets["SUPABASE_KEY"]
-            )
-        except Exception as e:
-            st.error(f"Connection Failed: {e}")
+        self.supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-    # --- Security Tools ---
-    def hash_password(self, password):
-        # Convert to bytes, hash, then back to string for DB storage
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-
-    def verify_password(self, input_password, stored_hash):
-        try:
-            return bcrypt.checkpw(input_password.encode('utf-8'), stored_hash.encode('utf-8'))
-        except:
-            return False
-
-    # --- Auth ---
     def login(self, username, password):
-        res = self.supabase.table("profiles").select("*").eq("username", username.strip()).execute()
-        if res.data:
-            user = res.data[0]
-            # Check hash instead of plain text
-            if self.verify_password(password, user['password']):
-                if user.get('status') == 'inactive': return "INACTIVE"
-                return user
-        return None
+        try:
+            res = self.supabase.table("profiles").select("*").eq("username", username.strip()).execute()
+            
+            if res.data:
+                user = res.data[0]
+                db_password = user['password']
+                
+                # CHECK 1: Is the DB password a Bcrypt hash? (Starts with $2b$ or $2a$)
+                if db_password.startswith('$2b$') or db_password.startswith('$2a$'):
+                    # It's a hash, use secure verification
+                    if bcrypt.checkpw(password.encode('utf-8'), db_password.encode('utf-8')):
+                        return self._finalize_login(user)
+                else:
+                    # CHECK 2: It's PLAIN TEXT (Old data)
+                    if password == db_password:
+                        # Success! Now, let's automatically hash it for next time
+                        new_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                        self.supabase.table("profiles").update({"password": new_hash}).eq("username", username).execute()
+                        return self._finalize_login(user)
+            
+            return None
+        except Exception as e:
+            st.error(f"Login Error: {e}")
+            return None
 
-    # --- Role & User Data Fetches ---
-    def get_all_roles(self):
-        res = self.supabase.table("roles").select("*").order("id").execute()
-        return res.data if res.data else []
+    def _finalize_login(self, user):
+        if user.get('status') == 'inactive':
+            return "INACTIVE"
+        # Map the role name for the UI
+        user['role_display'] = self.get_role_name(user.get('role_id'))
+        return user
 
-    def get_all_users(self):
-        res = self.supabase.table("profiles").select("*").order("username").execute()
-        return res.data if res.data else []
+    def get_role_name(self, r_id):
+        # Default mapping if table isn't joined yet
+        mapping = {1: "Admin", 2: "Manager", 3: "User"}
+        return mapping.get(r_id, "User")
