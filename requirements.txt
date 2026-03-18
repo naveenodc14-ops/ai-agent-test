@@ -4,3 +4,4 @@ groq
 pypdf
 pandas
 streamlit-option-menu
+bcrypt
