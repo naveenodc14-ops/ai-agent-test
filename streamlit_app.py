@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import pandas as pd
 from src.database import TravelDB
@@ -29,7 +33,6 @@ if "user" not in st.session_state:
 
 # 3. Session Data & Permissions
 user_data = st.session_state.user
-# Strict ID check: 1=Admin
 is_admin = str(user_data.get('role_id')) == '1'
 
 # 4. Navigation
@@ -45,7 +48,6 @@ st.sidebar.info(f"Access: {user_data.get('role_display')}")
 
 # 5. Routing
 try:
-    # Load data once for all pages
     bookings = db.get_bookings()
     df = pd.DataFrame(bookings)
 except:
