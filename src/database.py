@@ -4,6 +4,7 @@ import bcrypt
 
 class TravelDB:
     def __init__(self):
+        # Ensure these are set in your Streamlit Secrets
         self.supabase: Client = create_client(
             st.secrets["SUPABASE_URL"], 
             st.secrets["SUPABASE_KEY"]
@@ -21,18 +22,13 @@ class TravelDB:
         return None
 
     def reset_password(self, username, mobile, new_password):
-        # Verify user exists and linked mobile matches
+        # Join profiles with travellers to verify the mobile number
         res = self.supabase.table("profiles").select("*, travellers(mobile_number)").eq("username", username).execute()
         if res.data:
             user_data = res.data[0]
-            # Check nested join data
             db_mobile = user_data.get('travellers', {}).get('mobile_number')
             if db_mobile == mobile:
                 new_hash = self.hash_password(new_password)
                 self.supabase.table("profiles").update({"password": new_hash}).eq("username", username).execute()
                 return True
         return False
-
-    def get_bookings(self):
-        res = self.supabase.table("bookings").select("*, travellers(name, mobile_number)").execute()
-        return res.data if res.data else []
