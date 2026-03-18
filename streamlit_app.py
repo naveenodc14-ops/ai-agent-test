@@ -3,14 +3,14 @@ from streamlit_option_menu import option_menu
 from src.database import TravelDB
 from src.dashboard import show_dashboard
 from src.traveller_mgmt import show_traveller_mgmt
+from src.admin_panel import show_admin_panel
 
 st.set_page_config(page_title="Voyage Intel", layout="wide", page_icon="🛫")
 db = TravelDB()
 
-# --- AUTH GATE ---
+# --- AUTHENTICATION ---
 if "user" not in st.session_state:
-    if "forgot_mode" not in st.session_state: 
-        st.session_state.forgot_mode = False
+    if "forgot_mode" not in st.session_state: st.session_state.forgot_mode = False
     
     _, col2, _ = st.columns([1, 2, 1])
     with col2:
@@ -24,10 +24,7 @@ if "user" not in st.session_state:
                     if user:
                         st.session_state.user = user
                         st.rerun()
-                    else: 
-                        st.error("Invalid credentials.")
-            
-            # FIXED: Removed 'variant' to prevent compatibility errors
+                    else: st.error("Login Failed.")
             if st.button("Forgot Password?"):
                 st.session_state.forgot_mode = True
                 st.rerun()
@@ -37,46 +34,39 @@ if "user" not in st.session_state:
                 ru = st.text_input("Username")
                 rm = st.text_input("Registered Mobile Number")
                 rp = st.text_input("New Password", type="password")
-                if st.form_submit_button("Update Password"):
+                if st.form_submit_button("Update"):
                     if db.reset_password(ru, rm, rp):
-                        st.success("Password Updated! Please login.")
+                        st.success("Updated! Please login.")
                         st.session_state.forgot_mode = False
-                    else: 
-                        st.error("Verification failed. Check Username/Mobile.")
-            
+                    else: st.error("Verification failed.")
             if st.button("Back to Login"):
                 st.session_state.forgot_mode = False
                 st.rerun()
     st.stop()
 
-# --- LOGGED IN UI ---
+# --- NAVIGATION ---
 user = st.session_state.user
-selected = option_menu(
-    menu_title=None, 
-    options=["Dashboard", "Travellers"], 
-    icons=["grid", "people"], 
-    orientation="horizontal"
-)
+is_admin = str(user.get('role_id')) == '1' # Assuming 1 is Admin
 
+menu = ["Dashboard", "Travellers"]
+icons = ["grid", "people"]
+
+if is_admin:
+    menu.append("Admin Panel")
+    icons.append("gear")
+
+selected = option_menu(None, menu, icons=icons, orientation="horizontal")
+
+# --- ROUTING ---
 if selected == "Dashboard":
     show_dashboard(db)
 elif selected == "Travellers":
     show_traveller_mgmt(db)
+elif selected == "Admin Panel":
+    show_admin_panel(db)
 
 # --- GLOBAL CHAT ---
 st.divider()
-with st.expander("💬 AI Travel Assistant"):
-    if "messages" not in st.session_state: 
-        st.session_state.messages = []
-    
-    for m in st.session_state.messages: 
-        st.chat_message(m["role"]).write(m["content"])
-    
-    if prompt := st.chat_input("Ask about bookings..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        
-        # Placeholder for AI logic
-        resp = f"Analyzing database for: {prompt}..."
-        st.session_state.messages.append({"role": "assistant", "content": resp})
-        st.chat_message("assistant").write(resp)
+with st.expander("💬 AI Assistant"):
+    if prompt := st.chat_input("Ask about PNRs..."):
+        st.write(f"Analyzing: {prompt}")
