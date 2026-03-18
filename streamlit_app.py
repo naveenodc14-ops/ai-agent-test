@@ -10,75 +10,59 @@ from src.styles import apply_custom_theme
 from src.admin_panel import show_admin_panel
 from src.ai_agent import show_ai_assistant
 
-# 1. Initialize Page
-st.set_page_config(page_title="Voyage Intel", layout="wide", page_icon="✈️")
+# Setup
+st.set_page_config(page_title="Voyage Intel", layout="wide", page_icon="🛡️")
 apply_custom_theme()
 db = TravelDB()
 
-# 2. Authentication Gate
+# Auth
 if "user" not in st.session_state:
-    st.markdown("<h1 style='text-align:center; color:#4F46E5;'>Voyage Intelligence Hub</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; color:#4F46E5; margin-top:50px;'>System Access Portal</h1>", unsafe_allow_html=True)
     _, col2, _ = st.columns([1, 1, 1])
     with col2:
-        with st.form("login_form"):
+        with st.form("login"):
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
-            if st.form_submit_button("Sign In"):
+            if st.form_submit_button("Login", use_container_width=True):
                 user = db.login(u, p)
                 if user:
                     st.session_state.user = user
                     st.rerun()
                 else:
-                    st.error("Invalid credentials.")
+                    st.error("Access Denied: Invalid credentials or inactive account.")
     st.stop()
 
-# 3. Session Data & Permissions
-user_data = st.session_state.user
-is_admin = str(user_data.get('role_id')) == '1'
+# Context
+user = st.session_state.user
+is_admin = str(user.get('role_id')) == '1'
 
-# 4. Top Menu Bar Implementation
-# We define the options based on the user's role
-menu_options = ["Dashboard", "AI Assistant"]
-menu_icons = ["speedometer2", "robot"]
-
+# Navigation
+menu = ["Dashboard", "AI Assistant"]
+icons = ["grid-1x2", "robot"]
 if is_admin:
-    menu_options.append("Admin Panel")
-    menu_icons.append("shield-lock")
+    menu.append("Admin Panel")
+    icons.append("shield-lock")
 
-# The Menu Bar component
 selected = option_menu(
-    menu_title=None, # No title for horizontal top bar
-    options=menu_options,
-    icons=menu_icons,
-    menu_icon="cast",
-    default_index=0,
+    menu_title=None,
+    options=menu,
+    icons=icons,
     orientation="horizontal",
     styles={
-        "container": {"padding": "0!important", "background-color": "#0F172A"},
-        "icon": {"color": "#F1F5F9", "font-size": "18px"}, 
-        "nav-link": {"font-size": "16px", "text-align": "left", "margin":"0px", "--hover-color": "#1E293B", "color": "#F1F5F9"},
+        "container": {"background-color": "#0F172A", "padding": "0px"},
+        "nav-link": {"color": "white", "font-size": "15px"},
         "nav-link-selected": {"background-color": "#4F46E5"},
     }
 )
 
-# Sidebar - User Info & Logout Only
-with st.sidebar:
-    st.markdown(f"### 👤 {user_data.get('username')}")
-    st.info(f"Role: {user_data.get('role_display')}")
-    st.divider()
-    if st.button("Logout", use_container_width=True):
-        st.session_state.clear()
-        st.rerun()
-
-# 5. Routing Logic
+# Routing
 try:
-    bookings = db.get_bookings()
-    df = pd.DataFrame(bookings)
+    df = pd.DataFrame(db.get_bookings())
 except:
     df = pd.DataFrame()
 
 if selected == "Dashboard":
-    st.markdown("<h2 class='page-header'>Executive Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='page-header'>Data Insights</h2>", unsafe_allow_html=True)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 elif selected == "AI Assistant":
@@ -86,3 +70,12 @@ elif selected == "AI Assistant":
 
 elif selected == "Admin Panel":
     show_admin_panel(db)
+
+# Sidebar
+with st.sidebar:
+    st.markdown(f"### 👤 {user.get('username')}")
+    st.caption(f"Role: {user.get('role_display')}")
+    st.divider()
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
