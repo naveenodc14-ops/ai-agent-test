@@ -4,42 +4,68 @@ import bcrypt
 
 class TravelDB:
     def __init__(self):
-        self.supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        try:
+            self.supabase: Client = create_client(
+                st.secrets["SUPABASE_URL"], 
+                st.secrets["SUPABASE_KEY"]
+            )
+        except Exception as e:
+            st.error(f"Supabase Connection Failed: {e}")
 
+    # --- Security: Hashing (Not Decryption) ---
+    def hash_password(self, password):
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+    def verify_password(self, input_password, stored_hash):
+        try:
+            # This compares the input to the hash safely
+            return bcrypt.checkpw(input_password.encode('utf-8'), stored_hash.encode('utf-8'))
+        except:
+            return False
+
+    # --- Auth Logic (Smart Login) ---
     def login(self, username, password):
         try:
             res = self.supabase.table("profiles").select("*").eq("username", username.strip()).execute()
-            
             if res.data:
                 user = res.data[0]
-                db_password = user['password']
+                db_pass = user['password']
                 
-                # CHECK 1: Is the DB password a Bcrypt hash? (Starts with $2b$ or $2a$)
-                if db_password.startswith('$2b$') or db_password.startswith('$2a$'):
-                    # It's a hash, use secure verification
-                    if bcrypt.checkpw(password.encode('utf-8'), db_password.encode('utf-8')):
-                        return self._finalize_login(user)
+                # Check if it's a Bcrypt hash or plain text (for migration)
+                is_match = False
+                if db_pass.startswith('$2b$') or db_pass.startswith('$2a$'):
+                    is_match = self.verify_password(password, db_pass)
                 else:
-                    # CHECK 2: It's PLAIN TEXT (Old data)
-                    if password == db_password:
-                        # Success! Now, let's automatically hash it for next time
-                        new_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    is_match = (password == db_pass)
+                    if is_match: # Auto-migrate to hash on successful login
+                        new_hash = self.hash_password(password)
                         self.supabase.table("profiles").update({"password": new_hash}).eq("username", username).execute()
-                        return self._finalize_login(user)
-            
-            return None
-        except Exception as e:
-            st.error(f"Login Error: {e}")
-            return None
 
-    def _finalize_login(self, user):
-        if user.get('status') == 'inactive':
-            return "INACTIVE"
-        # Map the role name for the UI
-        user['role_display'] = self.get_role_name(user.get('role_id'))
-        return user
+                if is_match:
+                    if user.get('status') == 'inactive': return "INACTIVE"
+                    user['role_display'] = self.get_role_name(user.get('role_id'))
+                    return user
+            return None
+        except: return None
+
+    # --- Data Fetching (FIXED) ---
+    def get_bookings(self):
+        try:
+            res = self.supabase.table("bookings").select("*").execute()
+            return res.data if res.data else []
+        except: return []
+
+    def get_all_users(self):
+        res = self.supabase.table("profiles").select("*").order("username").execute()
+        return res.data if res.data else []
+
+    def get_all_roles(self):
+        res = self.supabase.table("roles").select("*").order("id").execute()
+        return res.data if res.data else []
 
     def get_role_name(self, r_id):
-        # Default mapping if table isn't joined yet
-        mapping = {1: "Admin", 2: "Manager", 3: "User"}
-        return mapping.get(r_id, "User")
+        roles = self.get_all_roles()
+        for r in roles:
+            if r['id'] == r_id: return r['role_name']
+        return "User"
