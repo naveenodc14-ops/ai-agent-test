@@ -4,17 +4,15 @@ import pandas as pd
 def show_traveller_mgmt(db):
     st.markdown("### 👤 Traveller Registry")
     
-    with st.form("new_traveller"):
-        name = st.text_input("Full Name")
-        mobile = st.text_input("Mobile Number (with country code)")
-        if st.form_submit_button("Register Traveller"):
-            if name and mobile:
-                db.supabase.table("travellers").insert({"name": name, "mobile_number": mobile}).execute()
-                st.success(f"Registered {name} successfully.")
-            else: st.warning("All fields are required.")
+    with st.form("reg_traveller"):
+        n = st.text_input("Full Name")
+        m = st.text_input("Mobile Number (Include Country Code)")
+        if st.form_submit_button("Register"):
+            if n and m:
+                db.supabase.table("travellers").insert({"name": n, "mobile_number": m}).execute()
+                st.success("Traveller Registered.")
+            else: st.error("Fields cannot be empty.")
 
     st.divider()
-    st.markdown("#### Registered Travellers")
-    res = db.supabase.table("travellers").select("*").execute()
-    if res.data:
-        st.dataframe(pd.DataFrame(res.data), use_container_width=True, hide_index=True)
+    data = db.supabase.table("travellers").select("*").execute().data
+    if data: st.table(pd.DataFrame(data))
