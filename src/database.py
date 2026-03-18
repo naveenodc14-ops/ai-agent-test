@@ -1,73 +1,61 @@
 import streamlit as st
 from supabase import create_client, Client
+import bcrypt
 
 class TravelDB:
     def __init__(self):
         try:
-            self.supabase: Client = create_client(
-                st.secrets["SUPABASE_URL"], 
-                st.secrets["SUPABASE_KEY"]
-            )
+            self.supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         except Exception as e:
-            st.error(f"Supabase Connection Failed: {e}")
+            st.error(f"DB Connection Error: {e}")
 
-    def _map_role(self, role_id):
-        mapping = {1: "SUPER_ADMIN", 2: "MANAGER", 3: "USER"}
-        return mapping.get(int(role_id), "GUEST")
+    # --- Security Logic ---
+    def hash_password(self, password):
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
+    def verify_password(self, input_password, hashed_password):
+        return bcrypt.checkpw(input_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+    # --- Auth Logic ---
     def login(self, username, password):
-        try:
-            # 1. Fetch by credentials only (ignore status for a moment)
-            res = self.supabase.table("profiles")\
-                .select("*")\
-                .eq("username", username.strip())\
-                .eq("password", password.strip())\
-                .execute()
-            
-            if res.data:
-                user = res.data[0]
-                
-                # 2. Defensive Status Check
-                # If status is NULL or missing, we treat it as 'active'
-                status = user.get('status', 'active')
-                if status is None: status = 'active'
-                
-                if status.lower() == 'inactive':
-                    st.error("Account deactivated. Please contact Admin.")
-                    return None
-                
-                user['role_display'] = self._map_role(user.get('role_id'))
+        res = self.supabase.table("profiles").select("*").eq("username", username.strip()).execute()
+        if res.data:
+            user = res.data[0]
+            if self.verify_password(password, user['password']):
+                if user.get('status', 'active') == 'inactive':
+                    return "INACTIVE"
+                user['role_display'] = self.get_role_name(user.get('role_id'))
                 return user
-            return None
-        except Exception as e:
-            st.error(f"Query Error: {e}")
-            return None
+        return None
 
-    def create_user(self, username, password, role_id):
+    # --- User Management ---
+    def create_user(self, u, p, r_id):
+        hashed = self.hash_password(p)
         try:
-            data = {"username": username.strip(), "password": password.strip(), "role_id": role_id, "status": "active"}
-            self.supabase.table("profiles").insert(data).execute()
+            self.supabase.table("profiles").insert({"username": u, "password": hashed, "role_id": r_id, "status": "active"}).execute()
             return True
         except: return False
 
-    def toggle_user_status(self, username, current_status):
+    def update_user_status(self, u, status):
         try:
-            new_s = "inactive" if current_status == "active" else "active"
-            self.supabase.table("profiles").update({"status": new_s}).eq("username", username).execute()
+            self.supabase.table("profiles").update({"status": status}).eq("username", u).execute()
             return True
         except: return False
 
-    def get_all_users(self):
-        try:
-            res = self.supabase.table("profiles").select("*").order("username").execute()
-            data = res.data
-            for u in data:
-                u['role_display'] = self._map_role(u.get('role_id'))
-            return data
-        except: return []
+    # --- Role Management ---
+    def get_role_name(self, r_id):
+        res = self.supabase.table("roles").select("role_name").eq("id", r_id).execute()
+        return res.data[0]['role_name'] if res.data else "UNKNOWN"
 
-    def get_bookings(self):
-        try:
-            res = self.supabase.table("bookings").select("*").execute()
-            return res.data
-        except: return []
+    def get_all_roles(self):
+        res = self.supabase.table("roles").select("*").execute()
+        return res.data if res.data else []
+
+    def manage_role(self, action, name, r_id=None, status='active'):
+        if action == "add":
+            self.supabase.table("roles").insert({"role_name": name, "status": 'active'}).execute()
+        elif action == "update":
+            self.supabase.table("roles").update({"role_name": name}).eq("id", r_id).execute()
+        elif action == "status":
+            self.supabase.table("roles").update({"status": status}).eq("id", r_id).execute()
+        return True
