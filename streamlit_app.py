@@ -2,52 +2,71 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 from src.database import TravelDB
 from src.dashboard import show_dashboard
+from src.traveller_mgmt import show_traveller_mgmt
 
+st.set_page_config(page_title="Voyage Intel", layout="wide", page_icon="🛫")
 db = TravelDB()
 
-# --- AUTH & FORGOT PASSWORD ---
+# --- LOGIN & FORGOT PASSWORD LOGIC ---
 if "user" not in st.session_state:
-    if "forgot" not in st.session_state: st.session_state.forgot = False
+    if "forgot_mode" not in st.session_state: st.session_state.forgot_mode = False
     
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
-        if not st.session_state.forgot:
-            with st.form("login"):
-                st.title("Login")
-                u = st.text_input("User")
-                p = st.text_input("Pass", type="password")
-                if st.form_submit_button("Sign In"):
+    _, col2, _ = st.columns([1, 2, 1])
+    with col2:
+        if not st.session_state.forgot_mode:
+            st.title("Sign In")
+            with st.form("login_form"):
+                u = st.text_input("Username")
+                p = st.text_input("Password", type="password")
+                if st.form_submit_button("Login", use_container_width=True):
                     user = db.login(u, p)
-                    if user: 
+                    if user:
                         st.session_state.user = user
                         st.rerun()
-            if st.button("Forgot Password?"):
-                st.session_state.forgot = True
+                    else: st.error("Invalid credentials.")
+            if st.button("Forgot Password?", variant="ghost"):
+                st.session_state.forgot_mode = True
                 st.rerun()
         else:
-            with st.form("reset"):
-                st.title("Reset Password")
+            st.title("Reset Password")
+            with st.form("reset_form"):
                 ru = st.text_input("Username")
-                rm = st.text_input("Registered Mobile")
+                rm = st.text_input("Registered Mobile Number")
                 rp = st.text_input("New Password", type="password")
-                if st.form_submit_button("Update"):
+                if st.form_submit_button("Update Password"):
                     if db.reset_password(ru, rm, rp):
-                        st.success("Updated! Please login.")
-                        st.session_state.forgot = False
+                        st.success("Password Updated! Please login.")
+                        st.session_state.forgot_mode = False
                     else: st.error("Verification failed.")
             if st.button("Back to Login"):
-                st.session_state.forgot = False
+                st.session_state.forgot_mode = False
                 st.rerun()
     st.stop()
 
-# --- MAIN APP ---
-selected = option_menu(None, ["Dashboard", "Travellers", "Admin"], orientation="horizontal")
+# --- MAIN APP NAVIGATION ---
+user = st.session_state.user
+selected = option_menu(
+    menu_title=None, 
+    options=["Dashboard", "Travellers", "Settings"], 
+    icons=["grid", "people", "gear"], 
+    orientation="horizontal"
+)
 
 if selected == "Dashboard":
     show_dashboard(db)
+elif selected == "Travellers":
+    show_traveller_mgmt(db)
 
-# --- GLOBAL CHAT ---
+# --- GLOBAL CHAT AT BOTTOM ---
 st.divider()
-with st.expander("💬 Chat Assistant"):
-    if prompt := st.chat_input("Ask me anything..."):
-        st.write(f"Analyzing: {prompt}")
+with st.expander("💬 AI Travel Assistant", expanded=False):
+    if "messages" not in st.session_state: st.session_state.messages = []
+    for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
+    
+    if prompt := st.chat_input("Ask about bookings..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        # Simple response for now
+        resp = f"Checking travel data for: {prompt}..."
+        st.session_state.messages.append({"role": "assistant", "content": resp})
+        st.chat_message("assistant").write(resp)
