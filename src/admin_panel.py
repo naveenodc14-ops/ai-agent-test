@@ -1,41 +1,65 @@
 import streamlit as st
 import pandas as pd
+from streamlit_option_menu import option_menu
 
 def show_admin_panel(db):
-    st.markdown("<h2 class='page-header'>User Access Management</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='page-header'>System Control Center</h2>", unsafe_allow_html=True)
     
-    with st.expander("➕ Register New Profile"):
-        with st.form("add_user_form", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
+    # Sub-menu for Admin Tasks
+    sub_tab = option_menu(
+        menu_title=None,
+        options=["User Management", "Role Management"],
+        icons=["people", "shield-shaded"],
+        orientation="horizontal",
+        styles={"container": {"background-color": "#f0f2f6"}}
+    )
+
+    if sub_tab == "User Management":
+        task = st.selectbox("Select Task", ["View Users", "Add User", "Update User Status"])
+        
+        if task == "View Users":
+            users = db.supabase.table("profiles").select("username, role_id, status").execute().data
+            st.table(pd.DataFrame(users))
+            
+        elif task == "Add User":
+            with st.form("add_u"):
                 u = st.text_input("Username")
                 p = st.text_input("Password", type="password")
-            with c2:
-                role_map = {"Admin": 1, "Manager": 2, "User": 3}
-                sel_r = st.selectbox("Role", options=list(role_map.keys()))
-            if st.form_submit_button("Create User"):
-                if u and p:
-                    if db.create_user(u, p, role_map[sel_r]):
-                        st.success("User created.")
+                roles = {r['role_name']: r['id'] for r in db.get_all_roles()}
+                r_name = st.selectbox("Role", list(roles.keys()))
+                if st.form_submit_button("Save"):
+                    if db.create_user(u, p, roles[r_name]):
+                        st.success("User Added")
                         st.rerun()
 
-    users = db.get_all_users()
-    if users:
-        df = pd.DataFrame(users)
-        # Ensure 'status' column is handled safely in the display
-        if 'status' not in df.columns: df['status'] = 'active'
-        df['status'] = df['status'].fillna('active')
-        
-        display_cols = [c for c in ['username', 'role_display', 'status', 'created_at'] if c in df.columns]
-        st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
+        elif task == "Update User Status":
+            users = [u['username'] for u in db.get_all_users()]
+            target = st.selectbox("User", users)
+            status = st.radio("Status", ["active", "inactive"])
+            if st.button("Update"):
+                db.update_user_status(target, status)
+                st.success("Status Updated")
 
-        st.markdown("---")
-        st.subheader("Update Status")
-        t_user = st.selectbox("Select User", options=df['username'].tolist())
-        c_status = df[df['username'] == t_user]['status'].values[0]
+    elif sub_tab == "Role Management":
+        role_task = st.selectbox("Action", ["Add Role", "Update Role", "Deactivate Role"])
         
-        label = "🔴 Deactivate" if c_status == "active" else "🟢 Reactivate"
-        if st.button(label):
-            if db.toggle_user_status(t_user, c_status):
-                st.success(f"Updated {t_user}")
+        if role_task == "Add Role":
+            r_new = st.text_input("New Role Name")
+            if st.button("Create Role"):
+                db.manage_role("add", r_new)
+                st.success("Role Created")
+
+        elif role_task == "Update Role":
+            roles = {r['role_name']: r['id'] for r in db.get_all_roles()}
+            target_r = st.selectbox("Select Role", list(roles.keys()))
+            new_name = st.text_input("New Name", value=target_r)
+            if st.button("Update Name"):
+                db.manage_role("update", new_name, r_id=roles[target_r])
                 st.rerun()
+
+        elif role_task == "Deactivate Role":
+            roles = {r['role_name']: r['id'] for r in db.get_all_roles()}
+            target_r = st.selectbox("Role to Toggle", list(roles.keys()))
+            if st.button("Toggle Status"):
+                db.manage_role("status", target_r, r_id=roles[target_r], status="inactive")
+                st.success("Status Changed")
