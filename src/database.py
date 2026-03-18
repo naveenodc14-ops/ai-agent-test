@@ -17,28 +17,50 @@ class TravelDB:
 
     def login(self, username, password):
         try:
-            res = self.supabase.table("profiles").select("*").eq("username", username).eq("password", password).execute()
+            # Added status check to the query
+            res = self.supabase.table("profiles")\
+                .select("*")\
+                .eq("username", username)\
+                .eq("password", password)\
+                .eq("status", "active")\
+                .execute()
+            
             if res.data:
                 user = res.data[0]
                 user['role_display'] = self._map_role(user.get('role_id'))
                 return user
             return None
-        except:
-            return None
+        except: return None
+
+    def create_user(self, username, password, role_id):
+        try:
+            # Defaulting new users to 'active'
+            data = {"username": username, "password": password, "role_id": role_id, "status": "active"}
+            self.supabase.table("profiles").insert(data).execute()
+            return True
+        except: return False
+
+    def toggle_user_status(self, username, current_status):
+        try:
+            new_status = "inactive" if current_status == "active" else "active"
+            self.supabase.table("profiles")\
+                .update({"status": new_status})\
+                .eq("username", username)\
+                .execute()
+            return True
+        except: return False
 
     def get_all_users(self):
         try:
-            res = self.supabase.table("profiles").select("*").execute()
+            res = self.supabase.table("profiles").select("*").order("username").execute()
             data = res.data
             for u in data:
                 u['role_display'] = self._map_role(u.get('role_id'))
             return data
-        except:
-            return []
+        except: return []
 
     def get_bookings(self):
         try:
             res = self.supabase.table("bookings").select("*").execute()
             return res.data
-        except:
-            return []
+        except: return []
