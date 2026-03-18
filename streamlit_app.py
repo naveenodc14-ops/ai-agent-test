@@ -1,100 +1,59 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 import streamlit as st
 import pandas as pd
-from streamlit_option_menu import option_menu
-from src.database import TravelDB
-from src.styles import apply_custom_theme
-from src.admin_panel import show_admin_panel
-from src.ai_agent import show_ai_assistant
 
-# 1. Page Config
-st.set_page_config(page_title="Voyage Intel", layout="wide", page_icon="📊")
-apply_custom_theme()
-db = TravelDB()
+def show_admin_panel(db):
+    st.markdown("<h2 class='page-header'>User Access Management</h2>", unsafe_allow_html=True)
+    
+    # 1. Registration Form
+    with st.expander("➕ Register New Profile", expanded=False):
+        with st.form("add_user_form", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                new_u = st.text_input("Username")
+                new_p = st.text_input("Password", type="password")
+            with c2:
+                role_map = {"Admin": 1, "Manager": 2, "User": 3}
+                sel_role = st.selectbox("Role", options=list(role_map.keys()))
+            
+            if st.form_submit_button("Create User"):
+                if new_u and new_p:
+                    if db.create_user(new_u, new_p, role_map[sel_role]):
+                        st.success(f"Profile {new_u} created successfully.")
+                        st.rerun()
+                else: st.warning("Fields cannot be empty.")
 
-# 2. Auth Gate
-if "user" not in st.session_state:
-    st.markdown("<h1 style='text-align:center; color:#4F46E5; margin-top:50px;'>Voyage Intel Login</h1>", unsafe_allow_html=True)
-    _, col2, _ = st.columns([1, 1, 1])
-    with col2:
-        with st.form("auth_form"):
-            u = st.text_input("Username")
-            p = st.text_input("Password", type="password")
-            if st.form_submit_button("Sign In", use_container_width=True):
-                user = db.login(u, p)
-                if user:
-                    st.session_state.user = user
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials.")
-    st.stop()
+    # 2. User Table with Safety Check
+    st.markdown("### Existing Users")
+    users = db.get_all_users()
+    
+    if users:
+        df = pd.DataFrame(users)
+        
+        # DEFENSIVE CHECK: Only include columns that actually exist in the DB
+        potential_cols = ['username', 'role_display', 'status', 'created_at']
+        display_cols = [c for c in potential_cols if c in df.columns]
+        
+        st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
 
-# 3. Define Menu Structure & Icons
-user = st.session_state.user
-is_admin = str(user.get('role_id')) == '1'
-
-menu_items = ["Dashboard", "AI Assistant"]
-menu_icons = ["grid-1x2", "chat-left-dots"]
-
-if is_admin:
-    menu_items.append("Admin Panel")
-    menu_icons.append("gear")
-
-# --- NEW: PERSISTENT NAVIGATION STATE ---
-# Initialize the menu index if it doesn't exist
-if "menu_index" not in st.session_state:
-    st.session_state.menu_index = 0
-
-# 4. Top Navigation Bar (Fixed for Highlight Sync)
-selected = option_menu(
-    menu_title=None,
-    options=menu_items,
-    icons=menu_icons,
-    # Use the session state to set the index
-    default_index=st.session_state.menu_index, 
-    orientation="horizontal",
-    styles={
-        "container": {"background-color": "#0F172A", "padding": "0px"},
-        "nav-link": {"color": "white", "font-size": "15px", "text-align": "center", "margin":"0px"},
-        "nav-link-selected": {"background-color": "#4F46E5"},
-    },
-    key="navigation_menu" # Adding a key helps Streamlit track the widget
-)
-
-# Update the index based on selection for the next re-run
-st.session_state.menu_index = menu_items.index(selected)
-
-# 5. Page Routing
-try:
-    df = pd.DataFrame(db.get_bookings())
-except:
-    df = pd.DataFrame()
-
-if selected == "Dashboard":
-    st.markdown("<h2 class='page-header'>Data Insights</h2>", unsafe_allow_html=True)
-    if not df.empty:
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        # 3. Modify Access (Only if 'status' column exists)
+        if 'status' in df.columns:
+            st.markdown("---")
+            st.subheader("Modify Access")
+            
+            col_u, col_b = st.columns([2, 1])
+            with col_u:
+                target = st.selectbox("Select User", options=df['username'].tolist())
+                # Get the current status for the selected user
+                user_row = df[df['username'] == target]
+                current_s = user_row['status'].values[0] if not user_row.empty else "active"
+            
+            with col_b:
+                btn_label = "Deactivate" if current_s == "active" else "Reactivate"
+                if st.button(btn_label, use_container_width=True):
+                    if db.toggle_user_status(target, current_s):
+                        st.success(f"User {target} is now {('inactive' if current_s == 'active' else 'active')}")
+                        st.rerun()
+        else:
+            st.warning("⚠️ 'status' column not found in database. Please run the ALTER TABLE command in Supabase.")
     else:
-        st.info("No booking data available.")
-
-elif selected == "AI Assistant":
-    # The AI page now stays highlighted because we set the default_index above
-    show_ai_assistant(df)
-
-elif selected == "Admin Panel":
-    show_admin_panel(db)
-
-# Sidebar
-with st.sidebar:
-    st.markdown(f"### 👤 {user.get('username')}")
-    st.caption(f"Access Level: {user.get('role_display')}")
-    st.divider()
-    if st.button("Sign Out"):
-        st.session_state.clear()
-        # Reset menu index on logout
-        if "menu_index" in st.session_state:
-            del st.session_state["menu_index"]
-        st.rerun()
+        st.info("No profiles found.")
