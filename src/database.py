@@ -9,7 +9,7 @@ class TravelDB:
                 st.secrets["SUPABASE_KEY"]
             )
         except Exception as e:
-            st.error(f"Connection Failed: {e}")
+            st.error(f"Supabase Connection Failed: {e}")
 
     def _map_role(self, role_id):
         mapping = {1: "SUPER_ADMIN", 2: "MANAGER", 3: "USER"}
@@ -17,43 +17,43 @@ class TravelDB:
 
     def login(self, username, password):
         try:
-            # We now filter by username, password, AND active status
+            # 1. Fetch by credentials only (ignore status for a moment)
             res = self.supabase.table("profiles")\
                 .select("*")\
                 .eq("username", username.strip())\
                 .eq("password", password.strip())\
-                .eq("status", "active")\
                 .execute()
             
             if res.data:
                 user = res.data[0]
+                
+                # 2. Defensive Status Check
+                # If status is NULL or missing, we treat it as 'active'
+                status = user.get('status', 'active')
+                if status is None: status = 'active'
+                
+                if status.lower() == 'inactive':
+                    st.error("Account deactivated. Please contact Admin.")
+                    return None
+                
                 user['role_display'] = self._map_role(user.get('role_id'))
                 return user
             return None
         except Exception as e:
-            st.error(f"Login Error: {e}")
+            st.error(f"Query Error: {e}")
             return None
 
     def create_user(self, username, password, role_id):
         try:
-            data = {
-                "username": username.strip(), 
-                "password": password.strip(), 
-                "role_id": role_id, 
-                "status": "active"
-            }
+            data = {"username": username.strip(), "password": password.strip(), "role_id": role_id, "status": "active"}
             self.supabase.table("profiles").insert(data).execute()
             return True
         except: return False
 
     def toggle_user_status(self, username, current_status):
         try:
-            # Switch between active and inactive
-            new_status = "inactive" if current_status == "active" else "active"
-            self.supabase.table("profiles")\
-                .update({"status": new_status})\
-                .eq("username", username)\
-                .execute()
+            new_s = "inactive" if current_status == "active" else "active"
+            self.supabase.table("profiles").update({"status": new_s}).eq("username", username).execute()
             return True
         except: return False
 
