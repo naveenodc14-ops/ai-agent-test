@@ -7,9 +7,10 @@ from src.traveller_mgmt import show_traveller_mgmt
 st.set_page_config(page_title="Voyage Intel", layout="wide", page_icon="🛫")
 db = TravelDB()
 
-# --- LOGIN & FORGOT PASSWORD LOGIC ---
+# --- AUTH GATE ---
 if "user" not in st.session_state:
-    if "forgot_mode" not in st.session_state: st.session_state.forgot_mode = False
+    if "forgot_mode" not in st.session_state: 
+        st.session_state.forgot_mode = False
     
     _, col2, _ = st.columns([1, 2, 1])
     with col2:
@@ -23,8 +24,11 @@ if "user" not in st.session_state:
                     if user:
                         st.session_state.user = user
                         st.rerun()
-                    else: st.error("Invalid credentials.")
-            if st.button("Forgot Password?", variant="ghost"):
+                    else: 
+                        st.error("Invalid credentials.")
+            
+            # FIXED: Removed 'variant' to prevent compatibility errors
+            if st.button("Forgot Password?"):
                 st.session_state.forgot_mode = True
                 st.rerun()
         else:
@@ -37,18 +41,20 @@ if "user" not in st.session_state:
                     if db.reset_password(ru, rm, rp):
                         st.success("Password Updated! Please login.")
                         st.session_state.forgot_mode = False
-                    else: st.error("Verification failed.")
+                    else: 
+                        st.error("Verification failed. Check Username/Mobile.")
+            
             if st.button("Back to Login"):
                 st.session_state.forgot_mode = False
                 st.rerun()
     st.stop()
 
-# --- MAIN APP NAVIGATION ---
+# --- LOGGED IN UI ---
 user = st.session_state.user
 selected = option_menu(
     menu_title=None, 
-    options=["Dashboard", "Travellers", "Settings"], 
-    icons=["grid", "people", "gear"], 
+    options=["Dashboard", "Travellers"], 
+    icons=["grid", "people"], 
     orientation="horizontal"
 )
 
@@ -57,16 +63,20 @@ if selected == "Dashboard":
 elif selected == "Travellers":
     show_traveller_mgmt(db)
 
-# --- GLOBAL CHAT AT BOTTOM ---
+# --- GLOBAL CHAT ---
 st.divider()
-with st.expander("💬 AI Travel Assistant", expanded=False):
-    if "messages" not in st.session_state: st.session_state.messages = []
-    for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
+with st.expander("💬 AI Travel Assistant"):
+    if "messages" not in st.session_state: 
+        st.session_state.messages = []
+    
+    for m in st.session_state.messages: 
+        st.chat_message(m["role"]).write(m["content"])
     
     if prompt := st.chat_input("Ask about bookings..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
-        # Simple response for now
-        resp = f"Checking travel data for: {prompt}..."
+        
+        # Placeholder for AI logic
+        resp = f"Analyzing database for: {prompt}..."
         st.session_state.messages.append({"role": "assistant", "content": resp})
         st.chat_message("assistant").write(resp)
