@@ -1,10 +1,11 @@
+# src/database.py - VERSION 2.0 (Verified get_bookings)
 import streamlit as st
 from supabase import create_client, Client
 import bcrypt
 
 class TravelDB:
     def __init__(self):
-        # Ensure these match your Streamlit Secrets exactly
+        # Configuration for Supabase
         self.supabase: Client = create_client(
             st.secrets["SUPABASE_URL"], 
             st.secrets["SUPABASE_KEY"]
@@ -18,17 +19,15 @@ class TravelDB:
             res = self.supabase.table("profiles").select("*").eq("username", username.strip()).execute()
             if res.data:
                 user = res.data[0]
-                # Compare hashed password
                 if bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
                     return user
             return None
         except Exception as e:
-            st.error(f"Login Logic Error: {e}")
+            st.error(f"Login Error: {e}")
             return None
 
     def reset_password(self, username, mobile, new_password):
         try:
-            # Verify user exists and join with traveller to check mobile number
             res = self.supabase.table("profiles").select("*, travellers(mobile_number)").eq("username", username).execute()
             if res.data:
                 user_data = res.data[0]
@@ -42,12 +41,12 @@ class TravelDB:
             st.error(f"Reset Error: {e}")
             return False
 
-    # --- THIS WAS THE MISSING FUNCTION ---
+    # CRITICAL: This must be present for dashboard.py to work
     def get_bookings(self):
         try:
-            # SQL Equivalent: SELECT * FROM bookings JOIN travellers ON ...
+            # Fetches bookings and joins with traveller names
             res = self.supabase.table("bookings").select("*, travellers(name, mobile_number)").execute()
             return res.data if res.data else []
         except Exception as e:
-            st.error(f"Data Fetch Error: {e}")
+            st.error(f"Fetch Error: {e}")
             return []
