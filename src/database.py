@@ -1,11 +1,9 @@
-# src/database.py - VERSION 2.0 (Verified get_bookings)
 import streamlit as st
 from supabase import create_client, Client
 import bcrypt
 
 class TravelDB:
     def __init__(self):
-        # Configuration for Supabase
         self.supabase: Client = create_client(
             st.secrets["SUPABASE_URL"], 
             st.secrets["SUPABASE_KEY"]
@@ -41,12 +39,12 @@ class TravelDB:
             st.error(f"Reset Error: {e}")
             return False
 
-    # CRITICAL: This must be present for dashboard.py to work
+    # --- THE FUNCTION THAT WAS MISSING ---
     def get_bookings(self):
         try:
-            # Fetches bookings and joins with traveller names
+            # Join Bookings with Travellers to get names
             res = self.supabase.table("bookings").select("*, travellers(name, mobile_number)").execute()
             return res.data if res.data else []
         except Exception as e:
-            st.error(f"Fetch Error: {e}")
+            st.error(f"Database Fetch Error: {e}")
             return []
